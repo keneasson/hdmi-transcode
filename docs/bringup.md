@@ -23,30 +23,38 @@ purpose. Steps marked **[hardware-touching]** are the ones to re-read before run
 
 Use Radxa's **official headless/CLI image** for the Zero 3W (Debian-based, Rockchip
 BSP kernel). Not the desktop variant: a display server would own the HDMI output we
-need to drive ourselves. Download from Radxa's Zero 3W docs page (follow the link there
-to the current release; the file name will contain `zero3` and `cli` or `server`):
+need to drive ourselves.
 
-- Docs: https://docs.radxa.com/en/zero/zero3
-- Releases: https://github.com/radxa-build/radxa-zero3/releases
+**Pinned build:** `radxa-zero3_debian_bullseye_cli_b6.img.xz` from release `b6`
+(2024-01-10) of https://github.com/radxa-build/radxa-zero3/releases. It is the newest
+release that ships a CLI variant; the later `rsdk-*` releases are KDE desktop builds
+(fallback if `b6` lacks the `tc358743` driver: `rsdk-b1`, Bookworm, and disable its
+display manager). The pin and the published sha512 live in `scripts/fetch-image.sh`;
+change them together.
 
-Record the exact image file name and kernel version in `hardware-notes.md` once booted.
+```sh
+scripts/fetch-image.sh            # downloads to ~/Downloads/radxa and verifies sha512
+```
+
+Docs for the board: https://docs.radxa.com/en/zero/zero3. Record the exact image and
+kernel version in `hardware-notes.md` once booted.
 
 ## 2. Write the image to microSD (lowest-risk first boot)
 
 Boot from microSD first. It leaves the eMMC untouched, so a bad image or a wrong
 overlay costs a re-flash of a card, not a board. Moving to eMMC is a later step.
 
-On the Mac, with the card inserted:
+On the Mac, with the card in a reader, **in a Terminal** (it prompts for `sudo` and
+for confirmation, so not from inside Claude Code):
 
 ```sh
-diskutil list                      # find the card, e.g. /dev/disk4 — CHECK THIS TWICE
-diskutil unmountDisk /dev/diskN
-xz -dc radxa-zero3_*.img.xz | sudo dd of=/dev/rdiskN bs=4m status=progress
-diskutil eject /dev/diskN
+diskutil list external physical   # find the card, e.g. /dev/disk5 — CHECK THIS TWICE
+scripts/flash-sd.sh /dev/diskN
 ```
 
-**[hardware-touching]** `dd` to the wrong disk destroys it. Balena Etcher is a fine
-alternative if you'd rather not type a disk number.
+**[hardware-touching]** The script refuses internal or virtual disks and partition
+identifiers, shows what it is about to erase, and requires the identifier typed back
+before it runs `dd`. Balena Etcher is a fine alternative if you'd rather click.
 
 ## 3. First boot checklist
 

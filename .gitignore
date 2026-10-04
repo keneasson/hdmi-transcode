@@ -5,6 +5,11 @@
 build/
 cmake-build-*/
 
+# OS images: never commit; scripts/fetch-image.sh is the record
+*.img
+*.img.xz
+*.sha512
+
 # OS / editor
 .DS_Store
 .vscode/
