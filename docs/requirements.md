@@ -87,6 +87,12 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 - R10. Configurable over **USB** (the board's USB port) as a second path, exact mechanism
   TBD (serial console, or USB gadget Ethernet presenting the same web page).
 - R11. **Stretch goal:** a Bluetooth phone app using the same settings API as R9.
+- R11a. **Network exposure.** The config web UI and SSH listen only on the box's own
+  hotspot subnet and on RFC 1918 (private) LAN addresses; nothing is ever reachable
+  from the internet, and the box never asks a router for port forwarding/UPnP. Default
+  credentials are forced to change on first use. Being on a private 10.x/192.168.x
+  subnet is a baseline, not the security: anyone on the venue LAN can reach the box,
+  so the UI itself must be safe to expose to the LAN.
 - R12. Configuration surface: output mode/resolution, aspect mode (R3), show/hide test
   pattern, network settings. Nothing that requires understanding video signalling.
 
