@@ -1,7 +1,7 @@
 # Requirements
 
 Living document. Decisions made in conversation get written here; anything not here is
-still open. Last updated 2026-10-04.
+still open. Last updated 2026-10-04. Project: https://github.com/keneasson/hdmi-transcode
 
 ## Problem
 
@@ -78,9 +78,12 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 
 ### Configuration
 
-- R9. Configurable from a phone/laptop over **WiFi via a web page** (first
-  implementation). Either the box joins the venue WiFi (mDNS name) or hosts its own
-  hotspot; both should be supported, hotspot as the fallback.
+- R9. Configurable from a phone/laptop over **WiFi via a web page**. First
+  implementation: the box **hosts its own hotspot** (SSID `hdmi-transcode`, a captive
+  landing page or `http://hdmi-transcode.local`). Joining the venue WiFi with an mDNS
+  name comes second and the hotspot remains the fallback when no venue network is
+  configured or reachable. The hotspot password is set at first boot / per unit, never
+  committed.
 - R10. Configurable over **USB** (the board's USB port) as a second path, exact mechanism
   TBD (serial console, or USB gadget Ethernet presenting the same web page).
 - R11. **Stretch goal:** a Bluetooth phone app using the same settings API as R9.
@@ -100,7 +103,9 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 
 ## Open questions
 
-- Projector model(s) to target and their native resolutions.
+- Projector model(s) to target. **Decided default:** design against 1024×768@60 as the
+  canonical 4:3 target until a real projector is in hand; the SyncMaster 2433 is the
+  bench display.
 - ATEM Mini frame rate in use (59.94 vs 50) — read from the bridge once connected.
 - Zero 3W CSI lane count (decides 1080p60 vs 1080p30 capture).
 - Production Buildroot image details (decided: Radxa headless image for bring-up,

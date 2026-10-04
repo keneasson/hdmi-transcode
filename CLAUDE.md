@@ -11,8 +11,8 @@ aspect handling (compress / letterbox / crop) selectable from a phone over WiFi.
 point is that a volunteer never has to understand EDIDs to make "the projector and the
 stream" work at the same time. Full requirements: `docs/requirements.md`.
 
-The repo holds the software, requirements and documentation. Code lives on GitHub under
-the `keneasson` account.
+The project is **hdmi-transcode**: https://github.com/keneasson/hdmi-transcode (public,
+BSD-3-Clause). The repo holds the software, requirements and documentation.
 
 ### Signal chain
 
@@ -33,11 +33,15 @@ TC358743 with `v4l2-ctl --query-dv-timings` once the board is up, and have the s
 detect input timing at runtime rather than hardcode it.
 
 Target displays:
-- Primary: a DVI-input 4:3 projector (the real use case — "letterbox/rescale 16:9 to 4:3").
+- Primary: a DVI-input 4:3 projector (the real use case). No specific model yet;
+  **1024×768@60 is the canonical 4:3 design target** until one is in hand.
 - Test bench: Samsung SyncMaster 2433 (DVI).
 
-Output format is user-selectable; the exact options are **not yet specified** (see
-`docs/requirements.md` once it exists).
+Configuration: phone web page over the box's **own WiFi hotspot** first; joining venue
+WiFi second; Bluetooth app is a stretch goal.
+
+Aspect handling is user-selectable: compress (default), letterbox, crop, native — see
+R3 in `docs/requirements.md`.
 
 ## Project status (as of 2026-10-04)
 
@@ -70,7 +74,8 @@ Output format is user-selectable; the exact options are **not yet specified** (s
 ## Repo layout (planned)
 
 ```
-docs/          requirements, hardware notes, setup/bring-up logs
+docs/          requirements.md, bringup.md (flash + first-boot checklist),
+               hardware-notes.md (findings from the real board; fill in, don't guess)
 software/      the application (own build system lives here)
 hardware/      wiring, device-tree overlays, board config, EDID dumps
 ```
@@ -128,6 +133,9 @@ Not yet defined. When the first code lands, record here:
 - Run `/pr` (project skill in `.claude/skills/pr/`) before opening or updating any PR.
   It carries this project's review checklist: resource ownership, the frame path,
   field robustness, and the hardware-touching rules.
+- Standing permission (Ken, 2026-10-04): run `/pr`, fix its findings, push the branch
+  and open the PR without asking each time. Report the link and the verdict.
+  **Merging is not covered**: ask before `gh pr merge`.
 - When a requirement is decided in conversation, write it into `docs/requirements.md`
   rather than leaving it only in chat history.
 - Record unverified hardware assumptions as such (as this file does) until confirmed on
