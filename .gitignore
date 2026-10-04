@@ -1,0 +1,11 @@
+# Claude Code local settings (per-machine)
+.claude/settings.local.json
+
+# Build output
+build/
+cmake-build-*/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
