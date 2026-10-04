@@ -133,6 +133,9 @@ Not yet defined. When the first code lands, record here:
 - Run `/pr` (project skill in `.claude/skills/pr/`) before opening or updating any PR.
   It carries this project's review checklist: resource ownership, the frame path,
   field robustness, and the hardware-touching rules.
+- Standing permission (Ken, 2026-10-04): run `/pr`, fix its findings, push the branch
+  and open the PR without asking each time. Report the link and the verdict.
+  **Merging is not covered**: ask before `gh pr merge`.
 - When a requirement is decided in conversation, write it into `docs/requirements.md`
   rather than leaving it only in chat history.
 - Record unverified hardware assumptions as such (as this file does) until confirmed on
