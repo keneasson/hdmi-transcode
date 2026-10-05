@@ -36,7 +36,7 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 | Accepts 1920×1080@60 over DVI? (expect no) | | |
 | Physical access | **No.** Bench testing uses the SyncMaster 2433 over the same HDMI→DVI cable; the projector's rows above get filled at the venue. | 2026-10-05 |
 
-## HDMI output (bringup §4)
+## HDMI output (bringup §6)
 
 | Item | Value | Date |
 |---|---|---|
@@ -48,7 +48,7 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 | `/dev/rga` present | | |
 | Kernel has TC358743 driver (built-in / module / absent) | | |
 
-## CSI / camera connector (bringup §4d–4e)
+## CSI / camera connector (bringup §5d–5e)
 
 | Item | Value | Date |
 |---|---|---|
@@ -57,7 +57,7 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 | `data-lanes` in device tree | | |
 | Overlays listed that mention csi/camera/tc358 | | |
 
-## WiFi (bringup §5)
+## WiFi (bringup §6)
 
 | Item | Value | Date |
 |---|---|---|
@@ -65,7 +65,7 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 | AP + client at the same time? | | |
 | Hotspot from a phone worked? | | |
 
-## Capture (bringup §7, after the C790 arrives)
+## Capture (bringup §8, after the C790 arrives)
 
 | Item | Value | Date |
 |---|---|---|
