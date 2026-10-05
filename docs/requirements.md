@@ -43,6 +43,11 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 - R1. Drive a display over the Zero 3W HDMI port (HDMI → DVI-D adapter for DVI displays).
 - R2. Read the attached display's EDID and offer only modes it supports; pick a sensible
   default (its preferred/native mode).
+- R2b. **Display hot-plug.** A display connected (or power-cycled) after the box has
+  booted must be detected and driven without a reboot: watch DRM hot-plug events and
+  mode-set when a connector becomes active. Observed 2026-10-05: the stock kernel
+  console only sets up the display present at boot, so this cannot be left to the
+  kernel.
 - R2a. **Cope with bad or missing display EDID** (common on older DVI projectors).
   Fallback ladder: display preferred mode → 1280×800@60 (primary target) → 1024×768@60
   → 640×480@60 (mandatory for every DVI/HDMI sink). Always overridable from the config UI, and the chosen mode is
