@@ -55,8 +55,8 @@ R3 in `docs/requirements.md`.
   Geekworm C790 / Auvidea B101 / BliKVM boards). Ships with 15-pin 1.0mm and 22-pin
   0.5mm FPC cables plus an I2S audio cable. Advertises 1080p60 and audio over I2S.
   - TC358743 does 1080p60 only over **4 CSI-2 lanes**; on 2 lanes it is limited to
-    1080p30. **Open question:** how many lanes the Zero 3W camera connector exposes and
-    which of the two FPC cables fits it. Verify on the board, don't assume.
+    1080p30. Radxa's docs say the Zero 3W camera connector is **4-lane, 22-pin 0.5 mm**
+    (so the C790's 22-pin cable). Confirm in the device tree before relying on it.
   - Driver: Linux mainline `tc358743` V4L2 subdev driver exists; whether it works with
     the RK3566 `rkcif` capture path depends on the kernel (Radxa BSP vs. mainline).
     Treat this as the main software risk and settle it before committing to an OS image.

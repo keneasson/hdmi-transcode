@@ -13,6 +13,16 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 | Default user changed | no | |
 | Boot medium (SD / eMMC) | | |
 
+## Zero 3W ports (from Radxa docs, https://docs.radxa.com/en/zero/zero3, 2026-10-05)
+
+| Item | Value | Date |
+|---|---|---|
+| USB-C ports | 2: "USB 2.0 Type-C OTG" = **power input** ("USB-C 1", 5 V/2 A) and "USB 3.0 Type-C HOST" | 2026-10-05 |
+| Which is which physically | Read the silkscreen; docs don't say left/right. Ken's reading: outer (left from the back) = power, inner = host. **Confirm before powering.** | |
+| Camera connector | "1x 4-lane MIPI CSI (22-pin, 0.5 mm pitch)" → use the C790's 22-pin 0.5 mm cable; 4 lanes allows 1080p60 (confirm in device tree, bringup §5e) | 2026-10-05 |
+| Display out | micro HDMI, 1080p60 | 2026-10-05 |
+| Radio | Wi-Fi 6 + BT 5.4 (3W) | 2026-10-05 |
+
 ## Image facts (from inspecting the file, not the board)
 
 | Item | Value | Date |
@@ -52,8 +62,8 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 
 | Item | Value | Date |
 |---|---|---|
-| Camera connector pin count | | |
-| Which C790 cable fits (15-pin 1.0 mm / 22-pin 0.5 mm) | | |
+| Camera connector pin count | 22-pin 0.5 mm per docs; confirm by eye | 2026-10-05 |
+| Which C790 cable fits (15-pin 1.0 mm / 22-pin 0.5 mm) | 22-pin 0.5 mm per docs; confirm | 2026-10-05 |
 | `data-lanes` in device tree | | |
 | Overlays listed that mention csi/camera/tc358 | | |
 
