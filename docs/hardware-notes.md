@@ -88,3 +88,15 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 ## Gotchas discovered
 
 Free-form, newest first. Anything that cost more than ten minutes goes here.
+
+- **2026-10-05, first boot attempt #1: stalled with no WiFi.** Screen froze after
+  `GROWROOT: CHANGED: partition=3 ... size=124055519` (the resize itself worked:
+  partition 3 is 63.5 GB afterwards). Board never appeared on the LAN. Pulled the card
+  and read the `config` partition with mtools: `before.txt` still present (rsetup
+  never finished), and its line 62 was `connect_wi-fi Easson` with **no password**:
+  `prepare-firstboot.sh` had accepted an empty password prompt. rsetup's
+  `connect_wi-fi` retries `nmcli device wifi connect` 10× (1 s apart) and cannot
+  succeed without a password. Fixed the script to refuse empty passwords, require a
+  confirmation, and verify the written line's field count. Lesson: a frozen console
+  after growroot does not mean a kernel hang; the first-boot service runs with its
+  output in the journal, not on the console.

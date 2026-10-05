@@ -25,8 +25,15 @@
 #
 # Requires mtools (brew install mtools). macOS cannot mount this FAT volume.
 #
-# Usage: scripts/prepare-firstboot.sh [path/to/image.img]
+# Usage: scripts/prepare-firstboot.sh [--open] [path/to/image.img]
+#   --open   the network has no password (otherwise an empty password is refused:
+#            on 2026-10-05 an empty prompt produced "connect_wi-fi Easson" with no
+#            password, rsetup's 10 nmcli retries could never succeed, and the first
+#            boot sat there with a frozen console.)
 set -euo pipefail
+
+open_network=0
+if [ "${1:-}" = "--open" ]; then open_network=1; shift; fi
 
 die() { echo "error: $*" >&2; exit 1; }
 command -v mcopy >/dev/null 2>&1 || die "mtools not found: brew install mtools"
@@ -43,8 +50,16 @@ CONFIG_OFFSET=16777216
 vol="$out@@$CONFIG_OFFSET"
 
 read -r -p "WiFi SSID: " WIFI_SSID
-read -r -s -p "WiFi password (not echoed): " WIFI_PSK; echo
 [ -n "$WIFI_SSID" ] || die "SSID is empty"
+if [ "$open_network" = 1 ]; then
+  WIFI_PSK=""
+else
+  read -r -s -p "WiFi password (typed blind, nothing will show): " WIFI_PSK; echo
+  [ -n "$WIFI_PSK" ] || die "password is empty. Type it and press Return once; for a network with no password re-run with --open."
+  read -r -s -p "Type the password again to confirm: " WIFI_PSK2; echo
+  [ "$WIFI_PSK" = "$WIFI_PSK2" ] || die "passwords do not match; nothing written."
+  echo "password accepted: ${#WIFI_PSK} characters"
+fi
 for v in "$WIFI_SSID" "$WIFI_PSK"; do
   [[ "$v" =~ [[:space:]] ]] && die "SSID/password contains whitespace; rsetup's connect_wi-fi splits on it. Use a network without spaces in either, or set up WiFi another way."
 done
@@ -84,6 +99,10 @@ mcopy -o -i "$vol" "$tmp/before.txt" ::before.txt
 echo "patched before.txt (password masked):"
 mtype -i "$vol" ::before.txt | grep -n -E '^[0-9]*:?connect_wi-fi|enable_service ssh' \
   | awk '$1 ~ /connect_wi-fi/ && NF >= 3 { $3 = "********" } { print }'
+# Belt and braces: the written line must have the number of fields we expect.
+nf="$(mtype -i "$vol" ::before.txt | awk '/^connect_wi-fi/ { print NF }')"
+want=$(( open_network ? 2 : 3 ))
+[ "$nf" = "$want" ] || die "written connect_wi-fi line has $nf fields, expected $want; not marking image ready."
 ok=1
 echo
 echo "ready: $out"
