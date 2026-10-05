@@ -36,7 +36,7 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 | Accepts 1920×1080@60 over DVI? (expect no) | | |
 | Physical access | **No.** Bench testing uses the SyncMaster 2433 over the same HDMI→DVI cable; the projector's rows above get filled at the venue. | 2026-10-05 |
 
-## HDMI output (bringup §6)
+## HDMI output (bringup §5)
 
 | Item | Value | Date |
 |---|---|---|
