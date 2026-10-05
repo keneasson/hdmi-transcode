@@ -23,6 +23,18 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 | First-boot mechanism | rsetup `before.txt` in `config`; `headless`-only SSH by default | 2026-10-04 |
 | Default accounts | `radxa`/`radxa`, `rock`/`rock` (sudo) | 2026-10-04 |
 
+## Target projector: NEC NP3151W (from spec sheet, not yet measured)
+
+| Item | Value | Date |
+|---|---|---|
+| Native | 1280×800, 16:10, 3LCD, 4000 lm ANSI | 2026-10-05 |
+| Digital input | DVI-D | 2026-10-05 |
+| Listed video formats | 720p, 1080i, 576i/p, 480i/p — **no 1080p**; max input 1600×1200 | 2026-10-05 |
+| EDID dump taken? | | |
+| Preferred mode in EDID | | |
+| Accepts 1280×800@60 over DVI? | | |
+| Accepts 1920×1080@60 over DVI? (expect no) | | |
+
 ## HDMI output (bringup §4)
 
 | Item | Value | Date |
