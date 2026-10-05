@@ -18,7 +18,8 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 | Item | Value | Date |
 |---|---|---|
 | USB-C ports | 2: "USB 2.0 Type-C OTG" = **power input** ("USB-C 1", 5 V/2 A) and "USB 3.0 Type-C HOST" | 2026-10-05 |
-| Which is which physically | Read the silkscreen; docs don't say left/right. Ken's reading: outer (left from the back) = power, inner = host. **Confirm before powering.** | |
+| Which is which physically | **Confirmed from the underside silkscreen (photos 2026-10-05):** the USB-C at the **corner next to the microSD slot** is `USB_OTG` / `5V IN` = power. The **middle** USB-C is `USB3.0` = host. Micro HDMI at the far end of the same edge. | 2026-10-05 |
+| Other markings | `Maskrom` push button beside the HDMI port (not in the docs page); `TF` = microSD slot, underside, power-port end; board revision silkscreen `ZERO 3W V1.12` | 2026-10-05 |
 | Camera connector | "1x 4-lane MIPI CSI (22-pin, 0.5 mm pitch)" → use the C790's 22-pin 0.5 mm cable; 4 lanes allows 1080p60 (confirm in device tree, bringup §5e) | 2026-10-05 |
 | Display out | micro HDMI, 1080p60 | 2026-10-05 |
 | Radio | Wi-Fi 6 + BT 5.4 (3W) | 2026-10-05 |
@@ -62,8 +63,8 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 
 | Item | Value | Date |
 |---|---|---|
-| Camera connector pin count | 22-pin 0.5 mm per docs; confirm by eye | 2026-10-05 |
-| Which C790 cable fits (15-pin 1.0 mm / 22-pin 0.5 mm) | 22-pin 0.5 mm per docs; confirm | 2026-10-05 |
+| Camera connector pin count | 22-pin 0.5 mm, confirmed by eye: `CSI` FPC on the short edge at the HDMI end, contacts toward the board | 2026-10-05 |
+| Which C790 cable fits (15-pin 1.0 mm / 22-pin 0.5 mm) | 22-pin 0.5 mm | 2026-10-05 |
 | `data-lanes` in device tree | | |
 | Overlays listed that mention csi/camera/tc358 | | |
 

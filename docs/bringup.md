@@ -11,7 +11,9 @@ purpose. Steps marked **[hardware-touching]** are the ones to re-read before run
 ## 0. What you need
 
 - Radxa Zero 3W (4 GB / 32 GB eMMC), its USB-C power supply (5 V, 2 A or better; a
-  weak supply causes random resets that look like software bugs).
+  weak supply causes random resets that look like software bugs). **Power goes into
+  the corner USB-C marked `USB_OTG` / `5V IN` on the underside**, the one next to the
+  microSD slot. The middle USB-C (`USB3.0`) is a host port, not a power input.
 - microSD card, 8 GB+, and a reader.
 - micro-HDMI → HDMI cable or adapter, then HDMI → DVI-D adapter to the SyncMaster.
 - A way to talk to the board. We have no keyboard, so: **WiFi + SSH, pre-configured
