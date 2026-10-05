@@ -55,7 +55,8 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 - R3. Aspect-handling modes for a 16:9 source on a non-16:9 display (for the primary
   16:10 target: compress = 11 % vertical stretch, letterbox = 40 px bars top/bottom,
   crop = 5 % off each side):
-  - **Compress** (default): anamorphic squeeze to fill the screen, nothing cut off.
+  - **Compress** (default, confirmed by Ken 2026-10-05): anamorphic squeeze to fill
+    the screen, nothing cut off.
   - **Letterbox**: preserve aspect, black bars.
   - **Crop**: preserve aspect, fill screen, trim edges.
   - **Native**: plain scale-to-fit with no aspect correction.
