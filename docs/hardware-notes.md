@@ -13,6 +13,29 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 | Default user changed | no | |
 | Boot medium (SD / eMMC) | | |
 
+## Image facts (from inspecting the file, not the board)
+
+| Item | Value | Date |
+|---|---|---|
+| Pinned image | `radxa-zero3_debian_bullseye_cli_b6.img.xz`, release `b6` 2024-01-10 | 2026-10-04 |
+| Decompressed size / sha512 | 2 549 646 336 bytes; hash pinned in `scripts/fetch-image.sh`, verified | 2026-10-04 |
+| Partitions | 1 `config` FAT 16 MB @ 16777216; 2 `boot` FAT 314 MB empty; 3 rootfs ext4 2.2 GB | 2026-10-04 |
+| First-boot mechanism | rsetup `before.txt` in `config`; `headless`-only SSH by default | 2026-10-04 |
+| Default accounts | `radxa`/`radxa`, `rock`/`rock` (sudo) | 2026-10-04 |
+
+## Target projector: NEC NP3151W (from spec sheet, not yet measured)
+
+| Item | Value | Date |
+|---|---|---|
+| Native | 1280×800, 16:10, 3LCD, 4000 lm ANSI | 2026-10-05 |
+| Digital input | DVI-D | 2026-10-05 |
+| Listed video formats | 720p, 1080i, 576i/p, 480i/p — **no 1080p**; max input 1600×1200 | 2026-10-05 |
+| EDID dump taken? | | |
+| Preferred mode in EDID | | |
+| Accepts 1280×800@60 over DVI? | | |
+| Accepts 1920×1080@60 over DVI? (expect no) | | |
+| Physical access | **No.** Bench testing uses the SyncMaster 2433 over the same HDMI→DVI cable; the projector's rows above get filled at the venue. | 2026-10-05 |
+
 ## HDMI output (bringup §4)
 
 | Item | Value | Date |

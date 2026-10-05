@@ -19,6 +19,17 @@ purpose. Steps marked **[hardware-touching]** are the ones to re-read before run
   from a first-boot wizard or by dropping a config on the boot partition; see Radxa
   docs). Serial is the most reliable for first boot because it shows the kernel log.
 
+## Mac-side tools
+
+Everything below runs on the Mac. Installed via Homebrew; each one is here because a
+step needs it:
+
+| Tool | Why | Install |
+|---|---|---|
+| `gh` | download pinned release assets, PRs | `brew install gh` |
+| `xz` | decompress the image | ships with macOS |
+| `mtools` | edit the image's FAT `config` partition; macOS cannot mount it | `brew install mtools` |
+
 ## 1. Image choice
 
 Use Radxa's **official headless/CLI image** for the Zero 3W (Debian-based, Rockchip
@@ -56,11 +67,57 @@ scripts/flash-sd.sh /dev/diskN
 identifiers, shows what it is about to erase, and requires the identifier typed back
 before it runs `dd`. Balena Etcher is a fine alternative if you'd rather click.
 
+## 2a. Prepare first boot: WiFi + SSH with no keyboard
+
+Facts found by inspecting the b6 image (2026-10-04), not from docs:
+
+- GPT layout: partition 1 `config` (16 MB FAT, byte offset 16777216), partition 2
+  `boot` (314 MB FAT, **empty**; U-Boot loads the kernel from the rootfs), partition 3
+  rootfs (ext4, 2.2 GB, grows to fill the card on first boot via `resize_root`).
+- `config` holds `before.txt` and `config.txt`, run by Radxa's `rsetup` first-boot
+  service and then deleted. Commands available include `add_user`, `connect_wi-fi
+  <ssid> [password]`, `enable_service`/`disable_service`, `update_locale`.
+  Reference: https://github.com/radxa-pkg/rsetup/blob/main/config/before.txt
+- Default accounts created by `before.txt`: `radxa`/`radxa` and `rock`/`rock`, both
+  in `sudo`, `video`, `render`, `i2c`, `gpio`. Change the passwords on first login.
+- **Trap:** the default is `disable_service ssh` then `if headless enable_service
+  ssh`, where *headless* means "no display connector attached". With the SyncMaster
+  plugged in, SSH stays **off** unless we enable it explicitly.
+- macOS cannot mount the `config` volume (`mount_msdos: Invalid argument`), so it is
+  edited with `mtools` at the raw offset before flashing.
+
+- **Constraint (from reading rsetup's `rconfig.sh`):** each line of `before.txt` is
+  split on whitespace with no quote handling and executed as-is. The SSID and the
+  password therefore cannot contain spaces or tabs. rsetup also echoes the command,
+  password included, to the first-boot journal on the board.
+
+`scripts/prepare-firstboot.sh` does this on a copy of the image: prompts for the home
+WiFi SSID/password (stored only inside that copy), refuses values with whitespace,
+sets `connect_wi-fi`, and replaces the conditional with an unconditional
+`enable_service ssh`. A failed run removes the partial copy.
+
+```sh
+scripts/prepare-firstboot.sh        # -> ~/Downloads/radxa/..._b6-firstboot.img
+scripts/flash-sd.sh /dev/diskN      # picks the -firstboot.img automatically
+```
+
+The `-firstboot.img` copy contains the WiFi password in plain text. It lives in
+`~/Downloads/radxa`, is git-ignored, and can be deleted after the card is written.
+
 ## 3. First boot checklist
 
-Insert the card, connect the SyncMaster, power on. Expect the kernel console on the
-display (if the image enables it) and/or on serial. Log in (the image's default
-credentials are in Radxa's docs; change them).
+Insert the card, connect the SyncMaster, power on. First boot takes a few minutes
+(rsetup runs `before.txt`, resizes the root filesystem, then reboots). Expect the
+kernel console on the display and/or serial.
+
+Finding the board with no keyboard (after §2a): it joins the home WiFi. Try, in order:
+
+```sh
+ssh radxa@radxa-zero3.local            # if mDNS resolves (hostname unverified; check)
+arp -a | grep -i -v incomplete         # look for a new address on the LAN
+# or the router's client list
+ssh radxa@<ip>                         # password: radxa — change it immediately
+```
 
 Run these and paste the output into `hardware-notes.md`:
 
@@ -113,13 +170,17 @@ in its mode list, what is its preferred mode.
 DRM/KMS. Find the connector id and a crtc id in the `-c` / `-p` output, then:
 
 ```sh
-sudo modetest -M rockchip -s <connector-id>@<crtc-id>:1024x768-60
+sudo modetest -M rockchip -s <connector-id>@<crtc-id>:1280x800-60   # the NP3151W's native mode
+sudo modetest -M rockchip -s <connector-id>@<crtc-id>:1024x768-60   # generic 4:3 target
 # Ctrl-C to release. Try the display's preferred mode too.
 ```
 
-If the SyncMaster shows colour bars at 1024×768, the entire output side of this
-project is proven at the hardware level: R1, R2 and the fallback ladder in R2a are
-now about software, not hardware. If the console tty grabs the display back when
+The SyncMaster stands in for the projector (no physical access to it): a DVI monitor
+accepts 1280×800@60 as a PC timing and scales it, so the exact mode-set path the
+NP3151W needs is exercised on the bench. If the SyncMaster shows colour bars at
+1280×800 and 1024×768, the entire output side of this project is proven at the
+hardware level: R1, R2 and the fallback ladder in R2a are now about software, not
+hardware. If the console tty grabs the display back when
 modetest exits, that's expected.
 
 Also confirm the hardware scaler exists:

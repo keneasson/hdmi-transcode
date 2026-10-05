@@ -1,7 +1,7 @@
 # Requirements
 
 Living document. Decisions made in conversation get written here; anything not here is
-still open. Last updated 2026-10-04. Project: https://github.com/keneasson/hdmi-transcode
+still open. Last updated 2026-10-05. Project: https://github.com/keneasson/hdmi-transcode
 
 ## Problem
 
@@ -44,10 +44,12 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 - R2. Read the attached display's EDID and offer only modes it supports; pick a sensible
   default (its preferred/native mode).
 - R2a. **Cope with bad or missing display EDID** (common on older DVI projectors).
-  Fallback ladder: display preferred mode → 1024×768@60 → 640×480@60 (mandatory for
-  every DVI/HDMI sink). Always overridable from the config UI, and the chosen mode is
+  Fallback ladder: display preferred mode → 1280×800@60 (primary target) → 1024×768@60
+  → 640×480@60 (mandatory for every DVI/HDMI sink). Always overridable from the config UI, and the chosen mode is
   remembered (R5) so the fallback search happens once, not every boot.
-- R3. Aspect-handling modes for a 16:9 source on a non-16:9 display:
+- R3. Aspect-handling modes for a 16:9 source on a non-16:9 display (for the primary
+  16:10 target: compress = 11 % vertical stretch, letterbox = 40 px bars top/bottom,
+  crop = 5 % off each side):
   - **Compress** (default): anamorphic squeeze to fill the screen, nothing cut off.
   - **Letterbox**: preserve aspect, black bars.
   - **Crop**: preserve aspect, fill screen, trim edges.
@@ -87,6 +89,12 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 - R10. Configurable over **USB** (the board's USB port) as a second path, exact mechanism
   TBD (serial console, or USB gadget Ethernet presenting the same web page).
 - R11. **Stretch goal:** a Bluetooth phone app using the same settings API as R9.
+- R11a. **Network exposure.** The config web UI and SSH listen only on the box's own
+  hotspot subnet and on RFC 1918 (private) LAN addresses; nothing is ever reachable
+  from the internet, and the box never asks a router for port forwarding/UPnP. Default
+  credentials are forced to change on first use. Being on a private 10.x/192.168.x
+  subnet is a baseline, not the security: anyone on the venue LAN can reach the box,
+  so the UI itself must be safe to expose to the LAN.
 - R12. Configuration surface: output mode/resolution, aspect mode (R3), show/hide test
   pattern, network settings. Nothing that requires understanding video signalling.
 
@@ -103,9 +111,12 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 
 ## Open questions
 
-- Projector model(s) to target. **Decided default:** design against 1024×768@60 as the
-  canonical 4:3 target until a real projector is in hand; the SyncMaster 2433 is the
-  bench display.
+- ~~Projector model~~ **Decided 2026-10-05:** NEC NP3151W, 1280×800 (16:10) native,
+  DVI-D. Spec source: https://www.projectorcentral.com/nec-np3151w.htm (lists 720p,
+  1080i, max input 1600×1200; **1080p not listed**). To verify on the unit: its EDID,
+  whether its DVI accepts 1280×800@60 as preferred, and whether it tolerates
+  1920×1080@60 at all. 1024×768@60 stays as the generic 4:3 secondary target. The
+  SyncMaster 2433 is the bench display.
 - ATEM Mini frame rate in use (59.94 vs 50) — read from the bridge once connected.
 - Zero 3W CSI lane count (decides 1080p60 vs 1080p30 capture).
 - Production Buildroot image details (decided: Radxa headless image for bring-up,

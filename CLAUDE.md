@@ -33,8 +33,12 @@ TC358743 with `v4l2-ctl --query-dv-timings` once the board is up, and have the s
 detect input timing at runtime rather than hardcode it.
 
 Target displays:
-- Primary: a DVI-input 4:3 projector (the real use case). No specific model yet;
-  **1024×768@60 is the canonical 4:3 design target** until one is in hand.
+- Primary: **NEC NP3151W** (3LCD, WXGA **1280×800 native, 16:10**, DVI-D input, 4000 lm,
+  2008–2010). **1280×800@60 is the canonical design target.** Its spec lists 720p/1080i
+  and max input 1600×1200, no 1080p: feeding it the 1080p chain directly is exactly the
+  failure this box fixes. Drive it at native 1280×800; read its EDID when connected.
+- Secondary/generic: 4:3 projectors at 1024×768@60 (the product is for venues in
+  general, not just this one).
 - Test bench: Samsung SyncMaster 2433 (DVI).
 
 Configuration: phone web page over the box's **own WiFi hotspot** first; joining venue
@@ -136,6 +140,9 @@ Not yet defined. When the first code lands, record here:
 - Standing permission (Ken, 2026-10-04): run `/pr`, fix its findings, push the branch
   and open the PR without asking each time. Report the link and the verdict.
   **Merging is not covered**: ask before `gh pr merge`.
+- Standing permission (Ken, 2026-10-04): install developer tooling on the Mac
+  (Homebrew) without asking, and record each tool and why in `docs/bringup.md`
+  "Mac-side tools". Still ask before anything that touches the board (above).
 - When a requirement is decided in conversation, write it into `docs/requirements.md`
   rather than leaving it only in chat history.
 - Record unverified hardware assumptions as such (as this file does) until confirmed on

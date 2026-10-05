@@ -5,8 +5,9 @@
 # refuses anything that is not an external, physical disk, shows you what it is
 # about to erase, and makes you type the disk identifier back before writing.
 #
-# Usage: scripts/flash-sd.sh /dev/diskN [path/to/image.img.xz]
-#   image defaults to the one scripts/fetch-image.sh downloads.
+# Usage: scripts/flash-sd.sh /dev/diskN [path/to/image.img | image.img.xz]
+#   image defaults to the -firstboot.img from scripts/prepare-firstboot.sh if it
+#   exists, else the pinned .img.xz from scripts/fetch-image.sh.
 set -euo pipefail
 
 if [ "$(uname -s)" != "Darwin" ]; then
@@ -18,7 +19,11 @@ if [ $# -lt 1 ]; then
 fi
 
 disk="$1"
-image="${2:-$HOME/Downloads/radxa/radxa-zero3_debian_bullseye_cli_b6.img.xz}"
+base="$HOME/Downloads/radxa/radxa-zero3_debian_bullseye_cli_b6"
+if [ $# -ge 2 ]; then image="$2"
+elif [ -f "$base-firstboot.img" ]; then image="$base-firstboot.img"
+else image="$base.img.xz"
+fi
 
 case "$disk" in
   /dev/disk[0-9]|/dev/disk[0-9][0-9]) ;;
@@ -43,7 +48,10 @@ read -r -p "Type the identifier ($disk) to confirm, anything else to abort: " co
 rdisk="${disk/\/dev\/disk//dev/rdisk}"
 diskutil unmountDisk "$disk"
 echo "writing (this takes a few minutes) ..."
-xz -dc "$image" | sudo dd of="$rdisk" bs=4m status=progress
+case "$image" in
+  *.xz) xz -dc "$image" | sudo dd of="$rdisk" bs=4m status=progress ;;
+  *)    sudo dd if="$image" of="$rdisk" bs=4m status=progress ;;
+esac
 sync
 diskutil eject "$disk"
 echo "done. Insert the card into the UNPOWERED board, connect the display, then power on."
