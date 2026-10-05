@@ -137,9 +137,11 @@ Not yet defined. When the first code lands, record here:
 - Run `/pr` (project skill in `.claude/skills/pr/`) before opening or updating any PR.
   It carries this project's review checklist: resource ownership, the frame path,
   field robustness, and the hardware-touching rules.
-- Standing permission (Ken, 2026-10-04): run `/pr`, fix its findings, push the branch
-  and open the PR without asking each time. Report the link and the verdict.
-  **Merging is not covered**: ask before `gh pr merge`.
+- Standing permission (Ken, 2026-10-04/05): run `/pr`, fix its findings, push the
+  branch, open the PR, and **merge it** ("merge at will") without asking each time.
+  Squash-merge, delete the branch, report the link and the review verdict. Still
+  pause and ask if the review has an unresolved 🔴, or if the diff touches the board
+  (device tree, boot, flashing, provisioning).
 - Standing permission (Ken, 2026-10-04): install developer tooling on the Mac
   (Homebrew) without asking, and record each tool and why in `docs/bringup.md`
   "Mac-side tools". Still ask before anything that touches the board (above).
