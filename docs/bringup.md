@@ -170,13 +170,17 @@ in its mode list, what is its preferred mode.
 DRM/KMS. Find the connector id and a crtc id in the `-c` / `-p` output, then:
 
 ```sh
-sudo modetest -M rockchip -s <connector-id>@<crtc-id>:1024x768-60
+sudo modetest -M rockchip -s <connector-id>@<crtc-id>:1280x800-60   # the NP3151W's native mode
+sudo modetest -M rockchip -s <connector-id>@<crtc-id>:1024x768-60   # generic 4:3 target
 # Ctrl-C to release. Try the display's preferred mode too.
 ```
 
-If the SyncMaster shows colour bars at 1024×768, the entire output side of this
-project is proven at the hardware level: R1, R2 and the fallback ladder in R2a are
-now about software, not hardware. If the console tty grabs the display back when
+The SyncMaster stands in for the projector (no physical access to it): a DVI monitor
+accepts 1280×800@60 as a PC timing and scales it, so the exact mode-set path the
+NP3151W needs is exercised on the bench. If the SyncMaster shows colour bars at
+1280×800 and 1024×768, the entire output side of this project is proven at the
+hardware level: R1, R2 and the fallback ladder in R2a are now about software, not
+hardware. If the console tty grabs the display back when
 modetest exits, that's expected.
 
 Also confirm the hardware scaler exists:
