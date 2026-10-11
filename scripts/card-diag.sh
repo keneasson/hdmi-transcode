@@ -65,9 +65,28 @@ dump /var/log/boot.log boot.log
 # journal files are binary; pull every *.journal we can find so strings/journalctl can read them
 for d in $(awk '/^ *[0-9]+ +[0-9]+ .* [0-9a-f]{32}$/ {print $NF}' "$out/journal-ls.txt" 2>/dev/null); do
   "$DEBUGFS" -R "ls -l /var/log/journal/$d" "$root" > "$out/journal-$d-ls.txt" 2>&1 || true
-  for j in $(grep -o '[A-Za-z0-9@_.~-]*\.journal\b' "$out/journal-$d-ls.txt" | sort -u); do
+  # journald renames a file it finds dirty (boot cut off by power loss) to *.journal~
+  for j in $(grep -o -E '[A-Za-z0-9@_.-]+\.journal~?$' "$out/journal-$d-ls.txt" | sort -u); do
     dump "/var/log/journal/$d/$j" "journal-$j"
   done
+done
+# Per-file summary, so boots from different boards can be told apart: boot ids,
+# RAM the kernel saw, whether an eMMC (mmcblk0) was present, and the last message.
+echo "== journal summary"
+for f in "$out"/journal-*.journal "$out"/journal-*.journal~; do
+  [ -s "$f" ] || continue
+  # extract once to a file: grep -q / -m1 on a strings pipe would SIGPIPE it, and
+  # pipefail would turn that into a false "no match"
+  txt="$f.txt"
+  strings -n 8 "$f" > "$txt"
+  {
+    echo "-- ${f##*/}"
+    grep '^_BOOT_ID=' "$txt" | sort -u | sed 's/^/   /' || echo "   (no boot id)"
+    grep -m1 '^MESSAGE=Memory:' "$txt" | sed 's/^MESSAGE=/   /' || echo "   (no Memory: line)"
+    if grep -q '^MESSAGE=mmcblk0:' "$txt"; then echo "   eMMC (mmcblk0) present"; else echo "   no eMMC seen"; fi
+    # file order, not strictly time order: the newest distinct message, roughly
+    grep '^MESSAGE=' "$txt" | tail -1 | sed 's/^MESSAGE=/   latest: /' || true
+  } | tee -a "$out/journal-summary.txt"
 done
 # NetworkManager connection profiles hold the WiFi password: copy with the psk masked
 for f in $(grep -o '[^ ]*\.nmconnection' "$out/nm-connections-ls.txt" | sort -u); do
