@@ -7,7 +7,7 @@
 #
 # Usage: scripts/flash-sd.sh /dev/diskN [path/to/image.img | image.img.xz]
 #   image defaults to the -firstboot.img from scripts/prepare-firstboot.sh if it
-#   exists, else the pinned .img.xz from scripts/fetch-image.sh.
+#   exists, else the pinned .img from scripts/fetch-image.sh (pins: scripts/image.env).
 set -euo pipefail
 
 if [ "$(uname -s)" != "Darwin" ]; then
@@ -19,10 +19,12 @@ if [ $# -lt 1 ]; then
 fi
 
 disk="$1"
-base="$HOME/Downloads/radxa/radxa-zero3_debian_bullseye_cli_b6"
+# shellcheck source=image.env
+. "$(cd "$(dirname "$0")" && pwd)/image.env"
+base="$IMAGE_DIR/$IMAGE_NAME"
 if [ $# -ge 2 ]; then image="$2"
 elif [ -f "$base-firstboot.img" ]; then image="$base-firstboot.img"
-else image="$base.img.xz"
+else image="$base.img"
 fi
 
 case "$disk" in

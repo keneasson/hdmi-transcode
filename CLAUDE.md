@@ -113,7 +113,9 @@ explanation: `docs/requirements.md`.
   otherwise.
 - **OS: as skinny as possible, no display server.** Our process owns the HDMI output
   through DRM/KMS directly; never install X/Wayland on the box. Staging:
-  1. Bring-up on Radxa's official **headless/server** image so the Rockchip BSP kernel,
+  1. Bring-up on Radxa's official image (newest release, pinned in `scripts/image.env`;
+     currently `rsdk-b1`, KDE build with the desktop disabled after first boot; older
+     CLI images don't support the 2026 boards' WiFi) so the Rockchip BSP kernel,
      `rkcif`, RGA, `tc358743` and the overlays are known-good while the hardware is
      being proven. Record every kernel/overlay/firmware finding in `docs/`.
   2. Production image built with **Buildroot** on that same Rockchip kernel, containing

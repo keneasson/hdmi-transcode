@@ -24,15 +24,24 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 | Display out | micro HDMI, 1080p60 | 2026-10-05 |
 | Radio | Wi-Fi 6 + BT 5.4 (3W) | 2026-10-05 |
 
+## Boards on hand
+
+| Board | RAM / storage | Notes | Date |
+|---|---|---|---|
+| A | 4 GB / 32 GB eMMC | eMMC arrived **with a system already installed** (3 partitions, chip `07S000`, 29.3 GiB); intended production-like board, gets the C790 | 2026-10-11 |
+| B | 2 GB / no eMMC | SD-only; bench board for bring-up and output-side work | 2026-10-11 |
+
 ## Image facts (from inspecting the file, not the board)
 
 | Item | Value | Date |
 |---|---|---|
-| Pinned image | `radxa-zero3_debian_bullseye_cli_b6.img.xz`, release `b6` 2024-01-10 | 2026-10-04 |
-| Decompressed size / sha512 | 2 549 646 336 bytes; hash pinned in `scripts/fetch-image.sh`, verified | 2026-10-04 |
-| Partitions | 1 `config` FAT 16 MB @ 16777216; 2 `boot` FAT 314 MB empty; 3 rootfs ext4 2.2 GB | 2026-10-04 |
-| First-boot mechanism | rsetup `before.txt` in `config`; `headless`-only SSH by default | 2026-10-04 |
-| Default accounts | `radxa`/`radxa`, `rock`/`rock` (sudo) | 2026-10-04 |
+| Pinned image | `radxa-zero3_bookworm_kde_b1`, release `rsdk-b1` 2025-07-15 (pins in `scripts/image.env`) | 2026-10-11 |
+| Size / sha512 | 1 454 086 428 bytes compressed (8 074 662 912 decompressed); sha512 of the `.xz` pinned, verified | 2026-10-11 |
+| Kernel | `6.1.84-10-rk2410-nocsf` (from the image's extlinux.conf / manifest) | 2026-10-11 |
+| Partitions | 1 `config` FAT 16 MB @ 16777216; 2 `boot` FAT 300 MB empty; 3 rootfs ext4 7.2 GB @ 348127232 | 2026-10-11 |
+| First-boot mechanism | rsetup 0.4.16 `before.txt` in `config`; `headless`-only SSH by default (same lines as b6) | 2026-10-11 |
+| Default accounts | `radxa`/`radxa`, `rock`/`rock` (sudo) | 2026-10-11 |
+| Previous pin | `radxa-zero3_debian_bullseye_cli_b6` (2024-01-10, kernel 5.10): **does not boot to userspace on our boards**, see gotchas | 2026-10-11 |
 
 ## Target projector: NEC NP3151W (from spec sheet, not yet measured)
 
@@ -88,6 +97,27 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 ## Gotchas discovered
 
 Free-form, newest first. Anything that cost more than ten minutes goes here.
+
+- **2026-10-11, b6 image hangs ~10 s into boot on both boards.** Board A (eMMC) and
+  board B (no eMMC) both stopped right after the journal flush, with the LED going
+  out at about the same moment, the HDMI console frozen on a static cursor, and
+  `before.txt` never consumed (rsetup.service never ran). Read with
+  `scripts/card-diag.sh`. Cause, **likely but unconfirmed on the board**: Radxa
+  changed the 3W's WiFi module after launch, and images from before the change don't
+  support it ([forum](https://forum.radxa.com/t/radxa-zero-3w-wifi-problem/25430)).
+  The log stops where the kernel powers the SDIO WiFi. Switched to `rsdk-b1`.
+  Lesson: pin the newest vendor image, not one from memory.
+- **2026-10-11, reading ext4 off a power-cut card shows a stale filesystem.**
+  `debugfs` reads blocks without replaying the ext4 journal, so changes committed
+  only to the journal before the power cut are invisible until Linux next mounts the
+  card. That made a board-A boot look like it came from board B. Treat card-diag's
+  rootfs view as "as of the last checkpoint". The `config` partition is FAT (no
+  journal) and is reliable.
+- **2026-10-11, board A's eMMC has its own system.** Its partitions may carry the
+  same UUIDs as an SD image of the same build, and `/config` is mounted by UUID, so an
+  SD boot on board A could end up reading the eMMC's `/config`. Not the cause of the
+  hang above (board B has no eMMC and hung the same way), but plan to flash board A's
+  eMMC directly (Maskrom + `rkdeveloptool`, bringup §7) rather than boot it from SD.
 
 - **2026-10-05, first boot attempt #1: stalled with no WiFi.** Screen froze after
   `GROWROOT: CHANGED: partition=3 ... size=124055519` (the resize itself worked:
