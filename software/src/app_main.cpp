@@ -239,7 +239,7 @@ class App {
         return;
       }
     }
-    std::printf("input changed\n");
+    if (!backing_off_) std::printf("input changed\n");
     restart_capture();
   }
 
@@ -252,33 +252,20 @@ class App {
     }
     if (!holding_) show_still();
     if (backing_off_ && !restarts_.empty())
-      next_retry_ = restarts_.back() + kBackoff;  // fixed to the last real restart
+      next_retry_ = restarts_.back() + kBackoff;  // fixed to the last start
     else
       next_retry_ = Clock::now() + std::chrono::milliseconds(holding_ ? kHoldRetryMs
                                                                       : kNoSignalRetryMs);
   }
 
   // Input side: stop fully, look for a signal, start again (N8, R6). An input that keeps
-  // dropping (a splitter resetting its link every second) is restarted at most every
-  // kBackoff once it has needed kMaxRestarts within kRestartWindow: rapid stop/start
-  // cycles of the ISP are what N8 warns about.
+  // coming and going (a splitter resetting its link every second) is started at most
+  // every kBackoff once it has been started kMaxRestarts times within kRestartWindow:
+  // rapid stop/start cycles of the ISP are what N8 warns about. Only actual starts count,
+  // so a cable pull (fast retries while nothing is there) never triggers the back-off.
   void restart_capture() {
     const auto now = Clock::now();
     while (!restarts_.empty() && now - restarts_.front() > kRestartWindow) restarts_.pop_front();
-    if (backing_off_ && !restarts_.empty() && now - restarts_.back() < kBackoff) {
-      cap_.stop();  // too soon: wait for next_retry_, whatever triggered this
-      lost_signal();
-      return;
-    }
-    restarts_.push_back(now);
-    if (restarts_.size() > kMaxRestarts && !backing_off_) {
-      backing_off_ = true;
-      std::printf("input unstable (%zu restarts in %lld s); retrying every %lld s\n",
-                  restarts_.size(), static_cast<long long>(kRestartWindow.count()),
-                  static_cast<long long>(kBackoff.count()));
-    } else if (restarts_.size() <= kMaxRestarts / 2) {
-      backing_off_ = false;
-    }
     cap_.stop();
     const auto t = cap_.detect();
     if (!t || t->interlaced) {
@@ -289,6 +276,19 @@ class App {
       first_ = false;
       lost_signal();
       return;
+    }
+    if (backing_off_ && !restarts_.empty() && now - restarts_.back() < kBackoff) {
+      lost_signal();  // signal present, but too soon after the last start
+      return;
+    }
+    restarts_.push_back(now);
+    if (restarts_.size() > kMaxRestarts && !backing_off_) {
+      backing_off_ = true;
+      std::printf("input unstable (%zu starts in %lld s); starting it at most every %lld s\n",
+                  restarts_.size(), static_cast<long long>(kRestartWindow.count()),
+                  static_cast<long long>(kBackoff.count()));
+    } else if (restarts_.size() <= kMaxRestarts / 2) {
+      backing_off_ = false;
     }
     try {
       cap_.start(*t);
@@ -502,7 +502,7 @@ class App {
   Clock::time_point last_frame_{};
   Clock::time_point next_retry_{};
   bool had_signal_ = false;
-  std::deque<Clock::time_point> restarts_;  // recent capture restarts (back-off)
+  std::deque<Clock::time_point> restarts_;  // recent capture starts (back-off)
   bool backing_off_ = false;
   bool holding_ = false;  // signal lost, last frame still on screen (kHoldLast)
   Clock::time_point lost_at_{};

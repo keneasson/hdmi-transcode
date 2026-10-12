@@ -149,8 +149,8 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 - N9. **Ride through upstream glitches** (2026-10-12, behind a splitter that resets its
   link about once a second): a source-change event with the same timing does not restart
   capture; after live video drops, the last frame stays up for 2 s before the slide /
-  test pattern; an input that needed more than 10 restarts in 30 s is retried at most
-  every 5 s (N8).
+  test pattern; an input that was started more than 10 times in 30 s is started at most
+  every 5 s (N8). A plain cable pull never triggers that back-off.
 - N8. **Capture is robust to restarts.** One process owns the capture device; streaming
   is stopped and the device fully closed before it is reopened (input format change,
   settings change). Observed 2026-10-11: overlapping a close and a re-open of the

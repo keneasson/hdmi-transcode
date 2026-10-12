@@ -145,9 +145,22 @@ HDCP handshake** at connection and it never completed (the driver leaves the TC3
 HDCP receiver off, `pdata.enable_hdcp = false`). After clearing the flags no new
 handshakes appeared during the resets. Ken reports the ATEM Mini showed the same flicker
 behind this splitter and not without it: both are capture sinks without HDCP.
-Leading hypothesis: the splitter resets sinks that fail HDCP. Alternatives not ruled out:
-the C790's +5 V back-power into the splitter output. Next test: enable the TC358743 HDCP
-receiver and see whether the resets stop.
+Ruled out by test the same day:
+- **HDCP:** with the TC358743 HDCP receiver enabled by hand (the driver's enable values:
+  `HDCP_MODE` 0x8560 = 0x24, `HDCP_REG1` 0x8563 = 0x11, `HDCP_REG2` 0x8564 = 0x0f,
+  `KEY_RD_CMD`) and the cable re-plugged, the splitter attempted **no** handshake and
+  the resets continued. The stale AN/AKSV flags most likely came from the Mac, which
+  probes HDCP when plugged in directly. (Restored: 0x26 / 0x00 / 0x00.)
+- **EDID:** the box's EDID, the ASUS's, and `v4l2-ctl --set-edid=type=hdmi` all gave
+  the same ~2 resets per second.
+- **Port / load / switch position:** all four outputs, with and without the ASUS,
+  positions 0 and 6.
+
+What remains is electrical between the splitter's transmitter and the C790: the C790's
++5 V back-power into the splitter output, or the transmitter's receiver-presence
+(termination / RxSense) check not being satisfied. Ken's ATEM Mini flickered the same way
+behind this splitter. Next: a +5 V (pin 18) blocker at the C790, an inline HDMI
+repeater, or a different splitter.
 
 Reading TC358743 registers without the driver's help (no `CONFIG_VIDEO_ADV_DEBUG`):
 `i2ctransfer -f -y 2 w2@0x0f 0x85 0x20 r1` (16-bit address, high byte first). Driver
