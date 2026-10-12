@@ -30,6 +30,7 @@ target_link_libraries(output PUBLIC PkgConfig::DRM PkgConfig::UDEV)
 # Input side, scaler, settings, slide + config server (R5, R6, R7, R9, R13, N2, N8).
 add_library(pipeline STATIC
   src/capture.cpp
+  src/event_log.cpp
   src/file_util.cpp
   src/http_server.cpp
   src/rga_scaler.cpp

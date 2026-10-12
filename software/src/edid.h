@@ -1,4 +1,5 @@
-// Minimal EDID reader: just enough to find the display's own preferred timing (R2).
+// Minimal EDID reader: just enough to find the display's own preferred timing (R2)
+// and its name (for the diagnostics page).
 // The kernel's "preferred" flag can't be trusted for this: on the Rockchip BSP kernel
 // a SyncMaster 2433 (EDID preferred 1920x1200@59.95) is reported with 1080p50 flagged
 // preferred instead (docs/hardware-notes.md, 2026-10-11).
@@ -6,6 +7,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace ht {
@@ -26,5 +28,9 @@ struct EdidTiming {
 // as the preferred timing), or nullopt if the blob is too short, the header is wrong,
 // the base-block checksum fails, or no detailed timing is present. Never throws.
 std::optional<EdidTiming> edid_preferred_timing(const std::vector<uint8_t>& edid);
+
+// The display's product name ("SyncMaster"), or "" if the EDID is invalid or has none.
+// Non-printable characters become '?'. Never throws.
+std::string edid_display_name(const std::vector<uint8_t>& edid);
 
 }  // namespace ht

@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include "check.h"
+#include "event_log.h"
 #include "http_server.h"
 #include "settings.h"
 
@@ -129,7 +130,25 @@ void base64() {
 
 }  // namespace
 
+void event_log_keeps_newest_and_escapes() {
+  using C = ht::EventLog::Clock;
+  const auto t0 = C::now();
+  ht::EventLog log(3, t0);
+  CHECK(log.json() == "[]");
+  log.add_at(t0 + std::chrono::seconds(1), "one");
+  log.add_at(t0 + std::chrono::seconds(2), "two \"quoted\"");
+  log.add_at(t0 + std::chrono::seconds(5), "three");
+  log.add_at(t0 + std::chrono::seconds(9), "four");
+  CHECK(log.size() == 3);
+  CHECK(log.json() ==
+        R"([{"t":2,"text":"two \"quoted\""},{"t":5,"text":"three"},{"t":9,"text":"four"}])");
+  ht::EventLog none(0, t0);
+  none.add_at(t0, "dropped");
+  CHECK(none.size() == 0);
+}
+
 int main() {
+  event_log_keeps_newest_and_escapes();
   settings_round_trip();
   settings_tolerate_junk();
   settings_file_io();

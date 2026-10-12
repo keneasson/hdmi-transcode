@@ -1,6 +1,8 @@
 // The configuration page (R9, R12, R13): one self-contained HTML document, no external
 // resources (the hotspot has no internet). Plain words, big touch targets; nothing that
-// requires understanding video signalling.
+// requires understanding video signalling. Status and "On the projector" are always
+// shown; the rest is split into tabs (Setup, Slide, Diagnostics) so each screen stays
+// short.
 //
 // The slide editor renders the slide here, in the browser, at the projector's resolution
 // and uploads it as a PNG; the box only stores and shows pictures. A slide is a template
@@ -36,6 +38,14 @@ canvas{display:block;width:100%;height:auto;margin-top:12px;border:1px solid var
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .hint{font-size:13px;color:var(--muted);margin:6px 0 0}
 #msg{min-height:1.4em;color:var(--muted);font-size:14px}
+nav{display:flex;gap:6px;margin:0 0 12px;position:sticky;top:0;background:var(--bg);padding:6px 0;z-index:1}
+nav button{flex:1;padding:10px 6px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--fg);font:inherit;font-weight:600;cursor:pointer}
+nav button[aria-selected=true]{border-color:var(--accent);background:var(--accent);color:#fff}
+[data-tab][hidden]{display:none}
+.verdict{font-size:16px;margin:0 0 4px}
+ol.events{list-style:none;margin:0;padding:0;font-size:14px}ol.events li{padding:6px 0;border-top:1px solid var(--line)}
+ol.events li:first-child{border-top:0}ol.events time{display:block;color:var(--muted);font-size:12px}
+textarea.report{font:12px/1.35 ui-monospace,Menlo,monospace;min-height:12em}
 </style></head><body><main>
 <h1>hdmi-transcode</h1>
 <section><h2>Now</h2><div class="status">
@@ -48,12 +58,20 @@ canvas{display:block;width:100%;height:auto;margin-top:12px;border:1px solid var
 </div>
 <p class="hint">With no input the slide is shown, or the test pattern if no slide is saved.</p>
 </section>
+<nav role="tablist">
+<button role="tab" data-go="setup">Setup</button>
+<button role="tab" data-go="slide">Slide</button>
+<button role="tab" data-go="diag">Diagnostics</button>
+</nav>
+<div data-tab="setup">
 <section><h2>Picture shape</h2>
 <button class="choice" data-aspect="compress">Fill the screen (stretch)<small>Nothing cut off; the picture is squeezed to fit.</small></button>
 <button class="choice" data-aspect="letterbox">Show the whole picture<small>Correct shape, black bars on the edges.</small></button>
 <button class="choice" data-aspect="crop">Fill the screen (trim edges)<small>Correct shape; the sides are cut off.</small></button>
 </section>
 <section><h2>Projector resolution</h2><select id="mode"></select></section>
+</div>
+<div data-tab="slide" hidden>
 <section><h2>Slide</h2>
 <div class="row3" id="templates"></div>
 <label class="f" for="s-title">Title</label><input type="text" id="s-title" maxlength="200">
@@ -68,6 +86,17 @@ canvas{display:block;width:100%;height:auto;margin-top:12px;border:1px solid var
 <button class="btn" id="s-clear">Remove</button>
 </div>
 </section>
+</div>
+<div data-tab="diag" hidden>
+<section><h2>Signal</h2><p class="verdict" id="d-verdict">…</p><p class="hint" id="d-advice"></p></section>
+<section><h2>Details</h2><div class="status" id="d-table"></div></section>
+<section><h2>What happened (newest first)</h2><ol class="events" id="d-events"></ol></section>
+<section><h2>Report</h2>
+<p class="hint">Everything on this tab as text, to send to whoever looks after the box.</p>
+<textarea class="report" id="d-report" readonly></textarea>
+<div class="buttons"><button class="btn" id="d-copy">Copy report</button></div>
+</section>
+</div>
 <div id="msg" role="status"></div>
 </main><script>
 const $=s=>document.querySelector(s);let busy=false,status={};
@@ -153,6 +182,56 @@ async function post(url,fields,done){busy=true;$('#msg').textContent='Saving…'
 document.querySelectorAll('[data-aspect]').forEach(b=>b.onclick=()=>post('/api/settings',{aspect:b.dataset.aspect}));
 document.querySelectorAll('[data-show]').forEach(b=>b.onclick=()=>post('/api/settings',{show:b.dataset.show}));
 $('#mode').onchange=e=>post('/api/settings',{mode:e.target.value});
+
+// --- diagnostics (R15): read on a phone at the venue, so plain words first ---
+function ago(sec){sec=Math.max(0,Math.round(sec));if(sec<60)return sec+' s ago';if(sec<3600)return Math.floor(sec/60)+' min ago';
+ return Math.floor(sec/3600)+' h '+Math.floor(sec%3600/60)+' min ago'}
+function dur(sec){sec=Math.round(sec);const d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60);
+ return (d?d+' d ':'')+(d||h?h+' h ':'')+m+' min'}
+function verdict(d){
+ if(!d.display)return['No projector connected.','Check the HDMI/DVI cable from the box to the projector.'];
+ if(d.backing_off)return['The input keeps dropping out.',
+  'The box was restarted by the input '+d.recent_starts+' times in the last 30 s, so it shows the slide and tries the live picture every 5 s. This is the cable or splitter in front of the box, not a setting: try another cable, splitter output, or connect the laptop directly.'];
+ if(!d.input)return['No input.','Nothing is arriving at the box. Check the cable into the box, that the laptop is awake and is sending to this screen (mirror or extend), and any splitter on the way.'];
+ if(d.fps_in>0&&d.fps_in<d.input.hz*0.9)return['The input is live but missing frames.','Frames arrive at '+d.fps_in+' per second instead of '+d.input.hz+'. Usually a marginal cable or splitter.'];
+ return['The input is steady.',d.resyncs?'The signal blinked '+d.resyncs+' times since the box started without the picture dropping; a cable or splitter is a little marginal.':'']}
+function diagRows(d){const r=[['Projector shows',d.state]];
+ r.push(['Input',d.input?d.input.width+'×'+d.input.height+' at '+d.input.hz+' Hz ('+d.input.pixel_clock_mhz+' MHz)':'none']);
+ r.push(['Frames per second','in '+d.fps_in+', shown '+d.fps_shown]);
+ r.push(['Scaler time',d.scaler_ms_avg+' ms average, '+d.scaler_ms_max+' ms worst']);
+ r.push(['Input started',d.starts+' times ('+d.recent_starts+' in the last 30 s)']);
+ r.push(['Input lost',d.losses+' times']);
+ r.push(['Blips ridden through',String(d.resyncs)]);
+ r.push(['Projector',d.display?((d.display.name||'unnamed')+(d.display.mode?', '+d.display.mode:'')):'none']);
+ if(d.temp_c!==undefined)r.push(['Box temperature',d.temp_c+' °C']);
+ if(d.uptime_s!==undefined)r.push(['Box on for',dur(d.uptime_s)]);
+ return r}
+function renderDiag(d){const[v,a]=verdict(d);$('#d-verdict').textContent=v;$('#d-advice').textContent=a;
+ const rows=diagRows(d),tbl=$('#d-table');tbl.textContent='';
+ for(const[k,val]of rows){const x=document.createElement('span'),y=document.createElement('span');x.textContent=k;y.textContent=val;tbl.append(x,y)}
+ const ev=[...d.events].reverse(),ol=$('#d-events');ol.textContent='';
+ for(const e of ev){const li=document.createElement('li'),t=document.createElement('time');t.textContent=ago(d.now-e.t);li.append(t,e.text);ol.appendChild(li)}
+ if(!ev.length)ol.textContent='Nothing yet.';
+ const rep=$('#d-report');if(document.activeElement!==rep)rep.value=['hdmi-transcode diagnostics',v,a,'',...rows.map(([k,x])=>k+': '+x),'',
+  'Events (seconds since the box software started, now '+d.now+'):',...d.events.map(e=>e.t+'  '+e.text)].join('\n')}
+let diagTimer=0;
+async function loadDiag(){try{const r=await fetch('/api/diag');renderDiag(await r.json())}catch(e){$('#d-verdict').textContent='Lost contact with the box.'}}
+function diagPolling(on){clearInterval(diagTimer);diagTimer=0;if(on){loadDiag();diagTimer=setInterval(loadDiag,2000)}}
+// The clipboard API needs https, which the box doesn't have: fall back to selecting the
+// text and the old copy command (iOS only selects an editable field, hence readOnly).
+$('#d-copy').onclick=async()=>{const t=$('#d-report');
+ try{await navigator.clipboard.writeText(t.value);$('#msg').textContent='Report copied.';return}catch(e){}
+ t.readOnly=false;t.focus();t.select();t.setSelectionRange(0,t.value.length);
+ let ok=false;try{ok=document.execCommand('copy')}catch(e){}
+ t.readOnly=true;$('#msg').textContent=ok?'Report copied.':'Report selected: tap Copy.'};
+
+// --- tabs: the choice lives in the URL fragment, so reload and back keep it ---
+function tab(){const want=location.hash.slice(1);const name=['setup','slide','diag'].includes(want)?want:'setup';
+ document.querySelectorAll('[data-tab]').forEach(d=>d.hidden=d.dataset.tab!==name);
+ document.querySelectorAll('[data-go]').forEach(b=>b.setAttribute('aria-selected',b.dataset.go===name));
+ diagPolling(name==='diag')}
+document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{location.hash=b.dataset.go});
+window.addEventListener('hashchange',tab);tab();
 
 (async()=>{try{const r=await fetch('/api/slide');const s=await r.json();if(s&&typeof s==='object')slide={...DEFAULT,...s}}catch(e){}
  fillEditor();await load();setInterval(load,3000)})();
