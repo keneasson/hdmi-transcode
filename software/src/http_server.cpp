@@ -17,6 +17,9 @@ namespace {
 
 constexpr size_t kMaxClients = 8;
 constexpr auto kIdle = std::chrono::seconds(5);
+// Upper bound on one connection however steadily it trickles (a slide upload over a weak
+// hotspot is the slowest legitimate case).
+constexpr auto kMaxConnection = std::chrono::seconds(60);
 
 std::string lower(std::string s) {
   std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -89,6 +92,35 @@ std::map<std::string, std::string> parse_form(const std::string& s) {
   return m;
 }
 
+std::optional<std::string> base64_decode(const std::string& s) {
+  auto val = [](char c) -> int {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+  };
+  size_t n = s.size();
+  while (n > 0 && s[n - 1] == '=') --n;
+  if (s.size() - n > 2 || n % 4 == 1) return std::nullopt;
+  std::string out;
+  out.reserve(n * 3 / 4);
+  uint32_t acc = 0;
+  int bits = 0;
+  for (size_t i = 0; i < n; ++i) {
+    const int v = val(s[i]);
+    if (v < 0) return std::nullopt;
+    acc = (acc << 6) | static_cast<uint32_t>(v);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out += static_cast<char>((acc >> bits) & 0xff);
+    }
+  }
+  return out;
+}
+
 std::string json_escape(const std::string& s) {
   std::string out;
   for (unsigned char c : s) {
@@ -111,11 +143,12 @@ std::string json_escape(const std::string& s) {
   return out;
 }
 
-ParseResult parse_http_request(const std::string& buf, HttpRequest& out) {
+ParseResult parse_http_request(const std::string& buf, HttpRequest& out,
+                               const BodyLimits& limits) {
   const size_t hdr_end = buf.find("\r\n\r\n");
   if (hdr_end == std::string::npos)
-    return buf.size() > kMaxRequestBytes ? ParseResult::TooLarge : ParseResult::Incomplete;
-  if (hdr_end + 4 > kMaxRequestBytes) return ParseResult::TooLarge;
+    return buf.size() > kMaxHeaderBytes ? ParseResult::TooLarge : ParseResult::Incomplete;
+  if (hdr_end + 4 > kMaxHeaderBytes) return ParseResult::TooLarge;
 
   HttpRequest r;
   size_t line_end = buf.find("\r\n");
@@ -144,19 +177,23 @@ ParseResult parse_http_request(const std::string& buf, HttpRequest& out) {
   size_t length = 0;
   if (auto it = r.headers.find("content-length"); it != r.headers.end()) {
     const std::string& v = it->second;
-    if (v.empty() || v.size() > 6 || v.find_first_not_of("0123456789") != std::string::npos)
+    if (v.empty() || v.size() > 9 || v.find_first_not_of("0123456789") != std::string::npos)
       return ParseResult::Bad;
     length = std::stoul(v);
   }
   if (r.headers.count("transfer-encoding")) return ParseResult::Bad;  // not supported
-  if (hdr_end + 4 + length > kMaxRequestBytes) return ParseResult::TooLarge;
+  const auto lim = limits.find(r.path);
+  if (length > (lim == limits.end() ? kMaxBodyBytes : lim->second)) return ParseResult::TooLarge;
   if (buf.size() < hdr_end + 4 + length) return ParseResult::Incomplete;
   r.body = buf.substr(hdr_end + 4, length);
   out = std::move(r);
   return ParseResult::Ok;
 }
 
-HttpServer::HttpServer(uint16_t port, HttpHandler handler) : handler_(std::move(handler)) {
+HttpServer::HttpServer(uint16_t port, HttpHandler handler, BodyLimits limits)
+    : handler_(std::move(handler)), limits_(std::move(limits)) {
+  for (const auto& [path, max] : limits_)
+    max_request_ = std::max(max_request_, kMaxHeaderBytes + max);
   listen_fd_ = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
   if (listen_fd_ < 0) throw std::runtime_error(std::string("socket: ") + std::strerror(errno));
   const int one = 1;
@@ -223,7 +260,8 @@ void HttpServer::accept_clients() {
     }
     char ip[INET_ADDRSTRLEN] = {};
     inet_ntop(AF_INET, &a.sin_addr, ip, sizeof ip);
-    clients_.push_back({fd, ip, {}, {}, 0, Clock::now() + kIdle});
+    const auto now = Clock::now();
+    clients_.push_back({fd, ip, {}, {}, 0, now + kIdle, now + kMaxConnection});
   }
 }
 
@@ -234,12 +272,13 @@ void HttpServer::on_client(Client& c, short revents) {
     return;
   }
   if (c.out.empty() && (revents & POLLIN)) {
-    char buf[2048];
+    char buf[16384];
     for (;;) {
       const ssize_t r = ::recv(c.fd, buf, sizeof buf, 0);
       if (r > 0) {
         c.in.append(buf, static_cast<size_t>(r));
-        if (c.in.size() > kMaxRequestBytes + 1) break;
+        c.deadline = std::min(Clock::now() + kIdle, c.give_up);  // idle, capped in total
+        if (c.in.size() > max_request_) break;
         continue;
       }
       if (r == 0 || (errno != EAGAIN && errno != EWOULDBLOCK)) {
@@ -250,7 +289,7 @@ void HttpServer::on_client(Client& c, short revents) {
       break;
     }
     HttpRequest req;
-    switch (parse_http_request(c.in, req)) {
+    switch (parse_http_request(c.in, req, limits_)) {
       case ParseResult::Incomplete: return;
       case ParseResult::Bad: respond(c, {400, "text/plain; charset=utf-8", "bad request\n"}); break;
       case ParseResult::TooLarge: respond(c, {413, "text/plain; charset=utf-8", "too large\n"}); break;
@@ -288,7 +327,7 @@ void HttpServer::respond(Client& c, const HttpResponse& r) {
                 r.status, reason(r.status), r.content_type.c_str(), r.body.size());
   c.out = head + r.body;
   c.sent = 0;
-  c.deadline = Clock::now() + kIdle;
+  c.deadline = std::min(Clock::now() + kIdle, c.give_up);
 }
 
 void HttpServer::close_client(size_t i) {

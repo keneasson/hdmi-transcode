@@ -11,10 +11,16 @@
 
 namespace ht {
 
+// What the projector shows while there is an input (R12, R13). With no input the slide
+// is shown if one is saved, otherwise the test pattern (R8).
+enum class Show { Input, Slide, Pattern };
+const char* to_string(Show s);
+std::optional<Show> parse_show(const std::string& s);
+
 struct Settings {
   std::optional<ModeRequest> mode;  // nullopt = automatic (R2/R2a)
   AspectMode aspect = AspectMode::Compress;
-  bool force_pattern = false;  // show the test pattern even with an input (R12)
+  Show show = Show::Input;
 
   bool operator==(const Settings& o) const;
 };
@@ -26,7 +32,7 @@ Settings parse_settings(const std::string& text);
 
 // Missing or unreadable file -> defaults.
 Settings load_settings(const std::string& path);
-// Atomic replace (write temp, fsync, rename, fsync dir). Throws std::runtime_error.
+// Atomic replace (see write_file_atomic). Throws std::runtime_error.
 void save_settings(const std::string& path, const Settings& s);
 
 std::string mode_to_string(const std::optional<ModeRequest>& m);  // "auto" or "WxH@Hz"

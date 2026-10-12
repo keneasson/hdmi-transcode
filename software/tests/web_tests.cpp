@@ -13,12 +13,19 @@ void settings_round_trip() {
   ht::Settings s;
   s.mode = ht::ModeRequest{1280, 800, 60};
   s.aspect = ht::AspectMode::Letterbox;
-  s.force_pattern = true;
+  s.show = ht::Show::Slide;
   CHECK(ht::parse_settings(ht::serialize(s)) == s);
   ht::Settings d;  // defaults: auto, compress, pattern off
   CHECK(ht::parse_settings(ht::serialize(d)) == d);
   CHECK(ht::mode_to_string(std::nullopt) == "auto");
   CHECK(ht::mode_to_string(ht::ModeRequest{1024, 768, 0}) == "1024x768");
+  for (auto v : {ht::Show::Input, ht::Show::Slide, ht::Show::Pattern})
+    CHECK(ht::parse_show(ht::to_string(v)) == v);
+  CHECK(!ht::parse_show("bogus"));
+  // Files written before `show` existed.
+  CHECK(ht::parse_settings("test_pattern=on\n").show == ht::Show::Pattern);
+  CHECK(ht::parse_settings("test_pattern=off\n").show == ht::Show::Input);
+  CHECK(ht::parse_settings("show=slide\n").show == ht::Show::Slide);
 }
 
 void settings_tolerate_junk() {
@@ -66,6 +73,17 @@ void http_parsing() {
   CHECK(ht::parse_http_request("POST / HTTP/1.1\r\nContent-Length: 999999\r\n\r\n", r) ==
         ht::ParseResult::TooLarge);
   CHECK(ht::parse_http_request(std::string(9000, 'a'), r) == ht::ParseResult::TooLarge);
+
+  // A larger body only where allowed, and only up to that path's limit.
+  const ht::BodyLimits limits{{"/api/slide", 100000}};
+  const std::string big = "POST /api/slide HTTP/1.1\r\nContent-Length: 50000\r\n\r\n" +
+                          std::string(50000, 'x');
+  CHECK(ht::parse_http_request(big, r, limits) == ht::ParseResult::Ok && r.body.size() == 50000);
+  CHECK(ht::parse_http_request(big, r) == ht::ParseResult::TooLarge);
+  CHECK(ht::parse_http_request("POST /api/settings HTTP/1.1\r\nContent-Length: 50000\r\n\r\n",
+                               r, limits) == ht::ParseResult::TooLarge);
+  CHECK(ht::parse_http_request("POST /api/slide HTTP/1.1\r\nContent-Length: 200000\r\n\r\n",
+                               r, limits) == ht::ParseResult::TooLarge);
 }
 
 uint32_t ip(int a, int b, int c, int d) {
@@ -96,6 +114,19 @@ void forms_and_json() {
   CHECK(ht::json_escape("a\"b\\c\n\x01") == "a\\\"b\\\\c\\n\\u0001");
 }
 
+void base64() {
+  CHECK(ht::base64_decode("") == std::string());
+  CHECK(ht::base64_decode("TWFu") == std::string("Man"));
+  CHECK(ht::base64_decode("TWE=") == std::string("Ma"));
+  CHECK(ht::base64_decode("TQ==") == std::string("M"));
+  CHECK(ht::base64_decode("TQ") == std::string("M"));  // padding optional
+  CHECK(ht::base64_decode("+/+/") == std::string("\xfb\xff\xbf"));
+  CHECK(!ht::base64_decode("TQ==="));
+  CHECK(!ht::base64_decode("T"));
+  CHECK(!ht::base64_decode("TW F"));
+  CHECK(!ht::base64_decode("TW-u"));
+}
+
 }  // namespace
 
 int main() {
@@ -105,5 +136,6 @@ int main() {
   http_parsing();
   private_addresses_only();
   forms_and_json();
+  base64();
   return finish();
 }

@@ -86,8 +86,9 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 - R7. Present a **maximally permissive EDID** on the capture side: advertise every mode
   the bridge can capture, 1080p60 preferred. The box must never be the device that
   constrains the upstream handshake (see "EDID in this chain" above).
-- R8. On signal loss, show the test pattern (R4) rather than a black screen, so the
-  operator can tell "box is fine, source is gone" from "box is dead".
+- R8. On signal loss, show the slide (R13) or, if none is saved, the test pattern (R4)
+  rather than a black screen, so the operator can tell "box is fine, source is gone"
+  from "box is dead" (the phone page also says "No input").
 - R8a. **Input changes never change the output mode.** A source swap (1080p laptop →
   720p laptop), signal loss, or re-handshake upstream is absorbed by the scaler; the
   display is never re-modeset and never blanks/resyncs because of something upstream.
@@ -109,8 +110,22 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
   credentials are forced to change on first use. Being on a private 10.x/192.168.x
   subnet is a baseline, not the security: anyone on the venue LAN can reach the box,
   so the UI itself must be safe to expose to the LAN.
-- R12. Configuration surface: output mode/resolution, aspect mode (R3), show/hide test
-  pattern, network settings. Nothing that requires understanding video signalling.
+- R12. Configuration surface: output mode/resolution, aspect mode (R3), what the
+  projector shows (live picture / slide / test pattern), the slide (R13), network
+  settings. Nothing that requires understanding video signalling.
+- R13. **Slide** (Ken, 2026-10-12): instead of calibration bars between talks, a simple
+  slide made on the phone page, e.g. "Coming up next", "Next presentation starts at
+  2pm", sponsors and upcoming activities.
+  - A few basic templates: title + subtitle centred both ways; heading + text centred;
+    heading + text left-aligned. Every template has an optional footer line. Background
+    and text colour are choosable. Live preview on the page.
+  - Built from components (a template is a list of parts) so it can grow: an uploaded
+    JPG/PNG picture is the planned next part.
+  - The page renders the slide at the projector's resolution and the box stores it as a
+    PNG (plus the page's description of it, for editing). The box needs no fonts, and an
+    uploaded picture is the same thing to it. One slide is stored; it survives restarts
+    (R5).
+  - Shown when chosen ("On the projector: Slide") and whenever there is no input.
 
 ## Non-functional
 
@@ -126,7 +141,7 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
   on (Ken, 2026-10-11: "we can't have the board sleep while there's video feeding it,
   that would be a short presentation"). No screensaver, no DPMS off, no console blanking
   (`consoleblank=0`), no desktop power management (the desktop is removed). With no
-  input the box shows the test pattern (R4), never a dark screen.
+  input the box shows the slide (R13) or the test pattern (R4), never a dark screen.
 - N7. **Nothing but our picture on the HDMI output.** No kernel or boot text, login
   prompt or cursor: on 2026-10-11 kernel messages scrolled over the live picture once the
   display manager was stopped. Quiet kernel console on HDMI (serial only), no getty on

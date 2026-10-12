@@ -1,15 +1,16 @@
 // hdmi-transcode: HDMI in (TC358743 + ISP) -> RGA scale/convert -> HDMI out (DRM/KMS).
 //
 //   hdmi-transcode [--settings FILE] [--port N] [--mode WxH[@Hz]] [--aspect MODE]
-//                  [--snapshot FILE.ppm]
+//                  [--snapshot FILE.ppm] [--slide-dir DIR]
 //
 // Settings (R5) are loaded from FILE (default /var/lib/hdmi-transcode/settings) and
-// changed from the configuration page served on port N (default 80; R9, R12). --mode and
+// changed from the configuration page served on port N (default 80; R9, R12); the slide
+// (R13) is kept in DIR (default /var/lib/hdmi-transcode). --mode and
 // --aspect override the saved settings for this run only (development).
 //
 // One event loop, one owner of every device (N8). The output mode is chosen from the
-// display and the settings, never from the input (R8a); with no input the test pattern is
-// shown (R8). Runs until SIGINT/SIGTERM.
+// display and the settings, never from the input (R8a); with no input the slide (R13) or,
+// with no slide saved, the test pattern is shown (R8). Runs until SIGINT/SIGTERM.
 #include <cerrno>
 #include <chrono>
 #include <csignal>
@@ -37,6 +38,7 @@
 #include "mode_select.h"
 #include "rga_scaler.h"
 #include "settings.h"
+#include "slide.h"
 #include "test_pattern.h"
 #include "web_page.h"
 
@@ -52,6 +54,7 @@ constexpr auto kStatsEvery = std::chrono::seconds(10);
 
 struct Options {
   std::string settings_path = "/var/lib/hdmi-transcode/settings";
+  std::string slide_dir = "/var/lib/hdmi-transcode";
   int port = 80;
   std::optional<ht::ModeRequest> mode_override;
   std::optional<ht::AspectMode> aspect_override;
@@ -77,7 +80,8 @@ void write_ppm(const std::string& path, const ht::Surface& s) {
 int usage(const char* argv0) {
   std::fprintf(stderr,
                "usage: %s [--settings FILE] [--port N] [--mode WxH[@Hz]]"
-               " [--aspect compress|letterbox|crop|native] [--snapshot FILE.ppm]\n",
+               " [--aspect compress|letterbox|crop|native] [--snapshot FILE.ppm]"
+               " [--slide-dir DIR]\n",
                argv0);
   return 2;
 }
@@ -91,13 +95,17 @@ class App {
   explicit App(Options o)
       : opt_(std::move(o)),
         settings_(ht::load_settings(opt_.settings_path)),
+        slide_(opt_.slide_dir),
         web_(static_cast<uint16_t>(opt_.port),
-             [this](const ht::HttpRequest& r) { return handle(r); }) {
+             [this](const ht::HttpRequest& r) { return handle(r); },
+             // The slide arrives base64 in a form: 4/3 for base64, headroom for escapes.
+             {{"/api/slide", ht::kMaxSlidePngBytes * 3 / 2 + ht::kMaxSlideSpecBytes * 3}}) {
     if (opt_.mode_override) settings_.mode = opt_.mode_override;
     if (opt_.aspect_override) settings_.aspect = *opt_.aspect_override;
-    std::printf("settings: mode %s, aspect %s, test pattern %s (web page on port %d)\n",
+    std::printf("settings: mode %s, aspect %s, show %s, slide %s (web page on port %d)\n",
                 ht::mode_to_string(settings_.mode).c_str(), ht::to_string(settings_.aspect),
-                settings_.force_pattern ? "on" : "off", opt_.port);
+                ht::to_string(settings_.show), slide_.has_slide() ? "saved" : "none",
+                opt_.port);
   }
 
   int run(int sfd) {
@@ -130,7 +138,7 @@ class App {
       web_.on_events(fds, web_first);
 
       if (Clock::now() >= next_stats_) log_stats();
-      if (cap_.streaming() && Clock::now() - last_frame_ > kFrameTimeout) {
+      if (cap_.streaming() && Clock::now() - last_frame_ > kFrameTimeout && !frame_waiting()) {
         std::printf("input %s: no frames, treating as signal loss\n",
                     cap_.description().c_str());
         restart_capture();
@@ -141,6 +149,13 @@ class App {
   }
 
  private:
+  // A frame is queued but not yet taken: the loop was busy (e.g. saving a slide), the
+  // input is fine. Without this a slow request looks like signal loss.
+  bool frame_waiting() const {
+    pollfd p{cap_.video_fd(), POLLIN, 0};
+    return poll(&p, 1, 0) > 0 && (p.revents & POLLIN);
+  }
+
   int timeout_ms() const {
     const auto now = Clock::now();
     auto until = cap_.streaming() ? last_frame_ + kFrameTimeout : next_retry_;
@@ -184,10 +199,10 @@ class App {
     if (out_.active() && ht::same_timing(out_.mode(), c.mode)) return;
     out_.set_mode(c.mode);
     out_.keep_awake();
-    pattern_on_ = false;
+    still_ = Still::None;
     std::printf("output %s (%s), aspect %s\n", ht::describe(c.mode).c_str(), c.reason.c_str(),
                 ht::to_string(settings_.aspect));
-    if (!cap_.streaming() || settings_.force_pattern) show_pattern();
+    if (!cap_.streaming() || settings_.show != ht::Show::Input) show_still();
   }
 
   // Input side: stop fully, look for a signal, start again (N8, R6).
@@ -195,19 +210,20 @@ class App {
     cap_.stop();
     const auto t = cap_.detect();
     if (!t || t->interlaced) {
-      if (had_signal_ || first_) std::printf("no input signal; showing the test pattern\n");
+      if (had_signal_ || first_)
+        std::printf("no input signal; showing the %s\n",
+                    slide_.has_slide() ? "slide" : "test pattern");
       had_signal_ = false;
       first_ = false;
-      show_pattern();
+      show_still();
       next_retry_ = Clock::now() + std::chrono::milliseconds(kNoSignalRetryMs);
       return;
     }
     try {
       cap_.start(*t);
     } catch (const std::exception& e) {
-      std::printf("input %dx%d: cannot capture (%s); showing the test pattern\n", t->width,
-                  t->height, e.what());
-      show_pattern();
+      std::printf("input %dx%d: cannot capture (%s)\n", t->width, t->height, e.what());
+      show_still();
       next_retry_ = Clock::now() + std::chrono::milliseconds(kNoSignalRetryMs);
       return;
     }
@@ -217,14 +233,31 @@ class App {
     std::printf("input %s\n", cap_.description().c_str());
   }
 
-  void show_pattern() {
-    if (!out_.active() || pattern_on_) return;
-    pattern_on_ = true;
+  // The still picture for the current state: the test pattern when asked for, else the
+  // slide when one is saved (asked for, or no input), else the test pattern (R8, R13).
+  // Drawn once; redrawn only when what should be shown changes.
+  void show_still() {
+    if (!out_.active()) return;
+    const bool pattern = settings_.show == ht::Show::Pattern || !slide_.has_slide();
+    const Still want = pattern ? Still::Pattern : Still::Slide;
+    if (still_ == want && (pattern || still_version_ == slide_.version())) return;
     const int i = out_.acquire();
     ht::Surface s = out_.surface(i);
-    const char* why = settings_.force_pattern ? "  TEST PATTERN" : "  NO INPUT";
-    ht::draw_test_pattern(s, ht::describe(out_.mode()) + why);
+    if (pattern) {
+      const char* why = settings_.show == ht::Show::Pattern ? "  TEST PATTERN"
+                        : settings_.show == ht::Show::Slide   ? "  NO SLIDE SAVED"
+                                                              : "  NO INPUT";
+      ht::draw_test_pattern(s, ht::describe(out_.mode()) + why);
+    } else {
+      ht::draw_image_fit(s, slide_.image());
+      still_version_ = slide_.version();
+    }
+    if (!opt_.snapshot.empty()) {
+      write_ppm(opt_.snapshot, s);
+      std::printf("snapshot written to %s\n", opt_.snapshot.c_str());
+    }
     out_.present(i);
+    still_ = want;
   }
 
   // Take every ready frame, show only the newest (latency over completeness).
@@ -237,7 +270,7 @@ class App {
     }
     if (!latest) return;
     last_frame_ = Clock::now();
-    if (out_.active() && !settings_.force_pattern) {
+    if (out_.active() && settings_.show == ht::Show::Input) {
       const int i = out_.acquire();
       const ht::DmaImage src{latest->dmabuf_fd,   latest->width, latest->height,
                              latest->stride_bytes, latest->plane_height,
@@ -260,9 +293,9 @@ class App {
       }
       out_.present(i);
       ++shown_;
-      pattern_on_ = false;
-    } else if (settings_.force_pattern) {
-      show_pattern();
+      still_ = Still::None;
+    } else {
+      show_still();
     }
     cap_.requeue(latest->index);
   }
@@ -278,6 +311,37 @@ class App {
       if (r.headers.count("x-ht-request") == 0)
         return json(403, R"({"error":"missing X-HT-Request header"})");
       return apply_settings(ht::parse_form(r.body));
+    }
+    if (r.path == "/api/slide") {
+      if (r.method == "GET")
+        return json(200, slide_.spec().empty() ? "null" : slide_.spec());
+      if (r.method != "POST" && r.method != "DELETE")
+        return json(405, R"({"error":"use GET, POST or DELETE"})");
+      if (r.headers.count("x-ht-request") == 0)
+        return json(403, R"({"error":"missing X-HT-Request header"})");
+      if (r.method == "DELETE") {
+        slide_.clear();
+        std::printf("slide removed\n");
+      } else {
+        auto f = ht::parse_form(r.body);
+        std::string png = f["png"];
+        // canvas.toDataURL() output is accepted as is.
+        if (const auto comma = png.find(','); png.rfind("data:", 0) == 0 && comma != png.npos)
+          png.erase(0, comma + 1);
+        const auto bytes = ht::base64_decode(png);
+        if (!bytes) return json(400, R"({"error":"The picture did not arrive intact."})");
+        const auto t0 = Clock::now();
+        const std::string err = slide_.save(*bytes, f["spec"]);
+        if (!err.empty()) return json(400, "{\"error\":\"" + ht::json_escape(err) + "\"}");
+        // Decode + fsync run on the event loop; log the stall so it stays measured.
+        std::printf("slide saved (%dx%d, %zu bytes, %lld ms)\n", slide_.image().width,
+                    slide_.image().height, bytes->size(),
+                    static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                               Clock::now() - t0)
+                                               .count()));
+      }
+      if (settings_.show != ht::Show::Input || !cap_.streaming()) show_still();
+      return json(200, status_json());
     }
     return {404, "text/plain; charset=utf-8", "not found\n"};
   }
@@ -298,24 +362,22 @@ class App {
         next.mode = m;
       }
     }
-    if (auto it = f.find("test_pattern"); it != f.end()) {
-      if (it->second != "on" && it->second != "off")
-        return json(400, R"({"error":"test_pattern must be on or off"})");
-      next.force_pattern = it->second == "on";
+    if (auto it = f.find("show"); it != f.end()) {
+      const auto v = ht::parse_show(it->second);
+      if (!v) return json(400, R"({"error":"show must be input, slide or pattern"})");
+      next.show = *v;
     }
     if (!(next == settings_)) {
       const bool mode_changed = ht::mode_to_string(next.mode) != ht::mode_to_string(settings_.mode);
-      const bool pattern_changed = next.force_pattern != settings_.force_pattern;
+      const bool show_changed = next.show != settings_.show;
       ht::save_settings(opt_.settings_path, next);  // R5: persist before reporting success
       settings_ = next;
-      std::printf("settings changed: mode %s, aspect %s, test pattern %s\n",
+      std::printf("settings changed: mode %s, aspect %s, show %s\n",
                   ht::mode_to_string(settings_.mode).c_str(), ht::to_string(settings_.aspect),
-                  settings_.force_pattern ? "on" : "off");
+                  ht::to_string(settings_.show));
       if (mode_changed) update_output();
-      if (pattern_changed) {
-        pattern_on_ = false;
-        if (settings_.force_pattern || !cap_.streaming()) show_pattern();
-      }
+      if (show_changed && (settings_.show != ht::Show::Input || !cap_.streaming()))
+        show_still();
     }
     return json(200, status_json());
   }
@@ -328,7 +390,14 @@ class App {
     s += out_.active() ? "\"" + ht::json_escape(ht::describe(out_.mode())) + "\"" : "null";
     s += ",\"aspect\":\"" + std::string(ht::to_string(settings_.aspect)) + "\"";
     s += ",\"mode\":\"" + ht::json_escape(ht::mode_to_string(settings_.mode)) + "\"";
-    s += std::string(",\"test_pattern\":") + (settings_.force_pattern ? "true" : "false");
+    s += ",\"show\":\"" + std::string(ht::to_string(settings_.show)) + "\"";
+    s += std::string(",\"has_slide\":") + (slide_.has_slide() ? "true" : "false");
+    if (slide_.has_slide())
+      s += ",\"slide_w\":" + std::to_string(slide_.image().width) +
+           ",\"slide_h\":" + std::to_string(slide_.image().height);
+    if (out_.active())
+      s += ",\"out_w\":" + std::to_string(out_.mode().hdisplay) +
+           ",\"out_h\":" + std::to_string(out_.mode().vdisplay);
     s += ",\"fps_in\":" + std::to_string(static_cast<int>(fps_in_ + 0.5));
     if (!mode_warning_.empty()) s += ",\"warning\":\"" + ht::json_escape(mode_warning_) + "\"";
     // Choices: automatic, what the projector offers, our built-in fallbacks.
@@ -353,6 +422,7 @@ class App {
 
   Options opt_;
   ht::Settings settings_;
+  ht::SlideStore slide_;
   ht::DrmOutput out_;
   ht::HotplugMonitor hotplug_;
   ht::Capture cap_;
@@ -362,7 +432,9 @@ class App {
   Clock::time_point next_retry_{};
   bool had_signal_ = false;
   bool first_ = true;
-  bool pattern_on_ = false;  // the test pattern is what's on screen; don't redraw it
+  enum class Still { None, Pattern, Slide };
+  Still still_ = Still::None;  // still picture on screen (None: live video); don't redraw it
+  unsigned still_version_ = 0;  // slide version drawn, when still_ == Slide
   std::string mode_warning_;
   Clock::time_point next_stats_ = Clock::now() + kStatsEvery;
   long captured_ = 0, shown_ = 0, snapshot_count_ = 0;
@@ -388,6 +460,8 @@ int main(int argc, char** argv) {
     } else if (a == "--port" && i + 1 < argc) {
       opt.port = std::atoi(argv[++i]);
       if (opt.port <= 0 || opt.port > 65535) return usage(argv[0]);
+    } else if (a == "--slide-dir" && i + 1 < argc) {
+      opt.slide_dir = argv[++i];
     } else if (a == "--snapshot" && i + 1 < argc) {
       opt.snapshot = argv[++i];
     } else {
