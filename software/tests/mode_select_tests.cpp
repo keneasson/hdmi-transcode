@@ -61,6 +61,21 @@ void edid_rejects_garbage() {
   CHECK(!ht::edid_preferred_timing(e));
 }
 
+void edid_display_name_cases() {
+  CHECK(ht::edid_display_name(kSyncMaster2433Edid) == "SyncMaster");
+  CHECK(ht::edid_display_name({}).empty());
+  std::vector<uint8_t> e = kSyncMaster2433Edid;
+  e[0] = 0x01;
+  CHECK(ht::edid_display_name(e).empty());  // bad header
+  e = kSyncMaster2433Edid;
+  for (int off = 54; off <= 108; off += 18)
+    if (e[off] == 0 && e[off + 3] == 0xfc) e[off + 3] = 0xfe;  // name -> unspecified text
+  uint8_t sum = 0;
+  for (int i = 0; i < 127; ++i) sum = static_cast<uint8_t>(sum + e[i]);
+  e[127] = static_cast<uint8_t>(-sum);
+  CHECK(ht::edid_display_name(e).empty());
+}
+
 void choice_uses_edid_not_kernel_flag() {
   auto c = ht::choose_mode(syncmaster_modes(), ht::edid_preferred_timing(kSyncMaster2433Edid),
                            std::nullopt);
@@ -176,6 +191,7 @@ void parse_mode_cases() {
 int main() {
   edid_syncmaster_preferred_is_1920x1200();
   edid_rejects_garbage();
+  edid_display_name_cases();
   choice_uses_edid_not_kernel_flag();
   request_wins_when_offered();
   request_for_builtin_timing_is_forced();

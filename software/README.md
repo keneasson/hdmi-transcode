@@ -36,7 +36,7 @@ It logs the output mode, input changes, and every 10 s: input fps, shown fps and
 
 **Configuration page** (R9, R12, R13): `http://<box>/` from a phone or laptop on the same
 network: what the projector shows (live / slide / test pattern), picture shape, projector
-resolution (Automatic recommended), and the slide editor. Changes apply immediately and
+resolution (Automatic recommended), the slide editor and a diagnostics tab. Changes apply immediately and
 are saved to `/var/lib/hdmi-transcode/settings` (R5); the slide is
 `/var/lib/hdmi-transcode/slide.png` plus `slide.json` (the page's description of it, for
 editing; `--slide-dir` moves both). The JSON API behind it:
@@ -45,6 +45,9 @@ editing; `--slide-dir` moves both). The JSON API behind it:
 - `GET /api/slide`: the saved description, or `null`
 - `POST /api/slide`: form fields `png` (base64 or a `data:` URL, ≤ 4 MB, ≤ 4096 px a
   side) and `spec`; `DELETE /api/slide` removes it
+- `GET /api/diag`: what the projector shows, input timing, frame rates, input
+  starts/losses/blips since start, projector name and mode, temperature, uptime and the
+  last 30 events (`t` = seconds since the app started; `now` is the current value)
 
 Changes need the header `X-HT-Request: 1`. Only private-network clients are served
 (R11a). The page draws the slide itself (canvas, at the projector's resolution) and

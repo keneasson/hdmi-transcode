@@ -126,6 +126,19 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
     uploaded picture is the same thing to it. One slide is stored; it survives restarts
     (R5).
   - Shown when chosen ("On the projector: Slide") and whenever there is no input.
+- R14. **Page layout** (Ken, 2026-10-12): the status and "On the projector" are always
+  visible; the rest is in tabs so each screen stays short: **Setup** (picture shape,
+  projector resolution), **Slide** (R13), **Diagnostics** (R15), and **Capture**
+  (planned: see the projector's picture on the phone, capture it and save it by name, to
+  show later or use as a slide background, e.g. a presenter's intro slide shown while
+  their laptop is disconnected).
+- R15. **Diagnostics** (Ken, 2026-10-12): at the venue the phone is the only screen, so
+  the page must say, in plain words, whether the input is steady, missing, or dropping
+  out (and that a dropping input is the cable/splitter, not a setting), with the input
+  timing, frame rates, how often the input was started/lost/blipped, the projector's
+  name and mode, the box's temperature and uptime, and the last 30 signal events with
+  "how long ago". A plain-text report of all of it can be copied from the phone and
+  sent on. Every event is also written to the system journal.
 
 ## Non-functional
 

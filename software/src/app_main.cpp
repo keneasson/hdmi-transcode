@@ -34,6 +34,7 @@
 #include "capture.h"
 #include "drm_output.h"
 #include "edid.h"
+#include "event_log.h"
 #include "hotplug.h"
 #include "http_server.h"
 #include "mode_select.h"
@@ -146,15 +147,14 @@ class App {
 
       if (Clock::now() >= next_stats_) log_stats();
       if (cap_.streaming() && Clock::now() - last_frame_ > kFrameTimeout && !frame_waiting()) {
-        std::printf("input %s: no frames, treating as signal loss\n",
-                    cap_.description().c_str());
+        events_.add("input %s: no frames, treating as signal loss", cap_.description().c_str());
         restart_capture();
       } else if (!cap_.streaming() && Clock::now() >= next_retry_) {
         restart_capture();
       }
       if (holding_ && Clock::now() - lost_at_ >= kHoldLast) {
         holding_ = false;
-        std::printf("no input signal for %lld s; showing the %s\n",
+        events_.add("no input signal for %lld s; showing the %s",
                     static_cast<long long>(kHoldLast.count()),
                     slide_.has_slide() ? "slide" : "test pattern");
         show_still();
@@ -183,19 +183,28 @@ class App {
   }
 
   void log_stats() {
-    const double secs =
-        std::chrono::duration<double>(Clock::now() - (next_stats_ - kStatsEvery)).count();
-    fps_in_ = captured_ / secs;
+    // Rates over the time the current capture has been running in this window, so a
+    // start halfway through doesn't read as half the frame rate.
+    const double secs = std::chrono::duration<double>(Clock::now() - stats_from_).count();
+    fps_in_ = secs > 0 ? captured_ / secs : 0;
+    fps_shown_ = secs > 0 ? shown_ / secs : 0;
+    rga_avg_ms_ = shown_ ? rga_us_total_ / 1000.0 / shown_ : 0;
+    rga_max_ms_ = rga_us_max_ / 1000.0;
     if (captured_)
       std::printf("stats: in %.1f fps, shown %.1f fps, rga %.2f ms avg / %.2f ms max%s\n",
-                  captured_ / secs, shown_ / secs, shown_ ? rga_us_total_ / 1000.0 / shown_ : 0,
-                  rga_us_max_ / 1000.0,
+                  fps_in_, fps_shown_, rga_avg_ms_, rga_max_ms_,
                   blips_ ? (", " + std::to_string(blips_) + " input re-syncs ridden through")
                                .c_str()
                          : "");
-    captured_ = shown_ = blips_ = 0;
-    rga_us_total_ = rga_us_max_ = 0;
+    reset_rates();
+    blips_ = 0;
     next_stats_ = Clock::now() + kStatsEvery;
+  }
+
+  void reset_rates() {
+    captured_ = shown_ = 0;
+    rga_us_total_ = rga_us_max_ = 0;
+    stats_from_ = Clock::now();
   }
 
   // Display side: (re)choose the mode only when the display or the setting changes (R2,
@@ -204,7 +213,7 @@ class App {
     if (!out_.connected()) {
       if (out_.active()) {
         out_.blank();
-        std::printf("display disconnected; output off until one is connected\n");
+        events_.add("display disconnected; output off until one is connected");
       }
       return;
     }
@@ -218,7 +227,7 @@ class App {
     out_.set_mode(c.mode);
     out_.keep_awake();
     still_ = Still::None;
-    std::printf("output %s (%s), aspect %s\n", ht::describe(c.mode).c_str(), c.reason.c_str(),
+    events_.add("output %s (%s), aspect %s", ht::describe(c.mode).c_str(), c.reason.c_str(),
                 ht::to_string(settings_.aspect));
     if (!cap_.streaming() || settings_.show != ht::Show::Input) show_still();
   }
@@ -236,10 +245,11 @@ class App {
           t->interlaced == cur.interlaced &&
           (t->refresh_mhz == cur.refresh_mhz || t->refresh_mhz == 0)) {
         ++blips_;
+        ++resyncs_total_;
         return;
       }
     }
-    if (!backing_off_) std::printf("input changed\n");
+    if (!backing_off_) events_.add("input changed");
     restart_capture();
   }
 
@@ -270,8 +280,9 @@ class App {
     const auto t = cap_.detect();
     if (!t || t->interlaced) {
       if ((had_signal_ || first_) && !holding_ && still_ != Still::None)
-        std::printf("no input signal; showing the %s\n",
+        events_.add("no input signal; showing the %s",
                     slide_.has_slide() ? "slide" : "test pattern");
+      if (had_signal_) ++losses_total_;
       had_signal_ = false;
       first_ = false;
       lost_signal();
@@ -284,7 +295,7 @@ class App {
     restarts_.push_back(now);
     if (restarts_.size() > kMaxRestarts && !backing_off_) {
       backing_off_ = true;
-      std::printf("input unstable (%zu starts in %lld s); starting it at most every %lld s\n",
+      events_.add("input unstable (%zu starts in %lld s); starting it at most every %lld s",
                   restarts_.size(), static_cast<long long>(kRestartWindow.count()),
                   static_cast<long long>(kBackoff.count()));
     } else if (restarts_.size() <= kMaxRestarts / 2) {
@@ -293,7 +304,7 @@ class App {
     try {
       cap_.start(*t);
     } catch (const std::exception& e) {
-      std::printf("input %dx%d: cannot capture (%s)\n", t->width, t->height, e.what());
+      events_.add("input %dx%d: cannot capture (%s)", t->width, t->height, e.what());
       lost_signal();
       return;
     }
@@ -301,7 +312,9 @@ class App {
     first_ = false;
     holding_ = false;
     last_frame_ = Clock::now();
-    std::printf("input %s\n", cap_.description().c_str());
+    ++starts_total_;
+    reset_rates();
+    events_.add("input %s", cap_.description().c_str());
   }
 
   // The still picture for the current state: the test pattern when asked for, else the
@@ -375,6 +388,7 @@ class App {
   ht::HttpResponse handle(const ht::HttpRequest& r) {
     if (r.path == "/" && r.method == "GET") return {200, "text/html; charset=utf-8", ht::kConfigPage};
     if (r.path == "/api/status" && r.method == "GET") return json(200, status_json());
+    if (r.path == "/api/diag" && r.method == "GET") return json(200, diag_json());
     if (r.path == "/api/settings") {
       if (r.method != "POST") return json(405, R"({"error":"use POST"})");
       // Cross-site requests can't set custom headers without a CORS preflight, which this
@@ -392,7 +406,7 @@ class App {
         return json(403, R"({"error":"missing X-HT-Request header"})");
       if (r.method == "DELETE") {
         slide_.clear();
-        std::printf("slide removed\n");
+        events_.add("slide removed");
       } else {
         auto f = ht::parse_form(r.body);
         std::string png = f["png"];
@@ -405,7 +419,7 @@ class App {
         const std::string err = slide_.save(*bytes, f["spec"]);
         if (!err.empty()) return json(400, "{\"error\":\"" + ht::json_escape(err) + "\"}");
         // Decode + fsync run on the event loop; log the stall so it stays measured.
-        std::printf("slide saved (%dx%d, %zu bytes, %lld ms)\n", slide_.image().width,
+        events_.add("slide saved (%dx%d, %zu bytes, %lld ms)", slide_.image().width,
                     slide_.image().height, bytes->size(),
                     static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(
                                                Clock::now() - t0)
@@ -443,7 +457,7 @@ class App {
       const bool show_changed = next.show != settings_.show;
       ht::save_settings(opt_.settings_path, next);  // R5: persist before reporting success
       settings_ = next;
-      std::printf("settings changed: mode %s, aspect %s, show %s\n",
+      events_.add("settings changed: mode %s, aspect %s, show %s",
                   ht::mode_to_string(settings_.mode).c_str(), ht::to_string(settings_.aspect),
                   ht::to_string(settings_.show));
       if (mode_changed) update_output();
@@ -491,7 +505,67 @@ class App {
     return s;
   }
 
+  // What is on the projector right now, in the page's words.
+  const char* state() const {
+    if (!out_.active()) return "no projector";
+    if (holding_) return "input lost, holding the last picture";
+    switch (still_) {
+      case Still::None: return "live picture";
+      case Still::Slide: return "slide";
+      case Still::Pattern: return "test pattern";
+    }
+    return "";
+  }
+
+  // Diagnostics tab (R15): enough to tell a bad cable or splitter from a bad setting,
+  // read on a phone at the venue.
+  std::string diag_json() const {
+    auto num = [](double v) {
+      char b[32];
+      std::snprintf(b, sizeof b, "%.1f", v);
+      return std::string(b);
+    };
+    std::string s = "{\"state\":\"" + std::string(state()) + "\"";
+    s += ",\"now\":" + std::to_string(events_.seconds_since_start(Clock::now()));
+    s += ",\"input\":";
+    if (cap_.streaming()) {
+      const auto& t = cap_.timing();
+      s += "{\"width\":" + std::to_string(t.width) + ",\"height\":" + std::to_string(t.height) +
+           ",\"hz\":" + num(t.refresh_mhz / 1000.0) +
+           ",\"pixel_clock_mhz\":" + num(t.pixel_clock_hz / 1e6) + "}";
+    } else {
+      s += "null";
+    }
+    s += ",\"fps_in\":" + num(fps_in_) + ",\"fps_shown\":" + num(fps_shown_);
+    s += ",\"scaler_ms_avg\":" + num(rga_avg_ms_) + ",\"scaler_ms_max\":" + num(rga_max_ms_);
+    s += ",\"starts\":" + std::to_string(starts_total_);
+    s += ",\"losses\":" + std::to_string(losses_total_);
+    s += ",\"resyncs\":" + std::to_string(resyncs_total_);
+    s += ",\"recent_starts\":" + std::to_string(restarts_.size());
+    s += std::string(",\"backing_off\":") + (backing_off_ ? "true" : "false");
+    s += ",\"display\":";
+    if (out_.connected())
+      s += "{\"name\":\"" + ht::json_escape(ht::edid_display_name(out_.edid())) +
+           "\",\"mode\":\"" + (out_.active() ? ht::json_escape(ht::describe(out_.mode())) : "") +
+           "\"}";
+    else
+      s += "null";
+    if (auto t = read_number("/sys/class/thermal/thermal_zone0/temp")) s += ",\"temp_c\":" + num(*t / 1000);
+    if (auto u = read_number("/proc/uptime")) s += ",\"uptime_s\":" + std::to_string(static_cast<long long>(*u));
+    s += ",\"events\":" + events_.json();
+    return s + "}";
+  }
+
+  // First number in a small /proc or /sys file.
+  static std::optional<double> read_number(const char* path) {
+    std::ifstream f(path);
+    double v;
+    if (f >> v) return v;
+    return std::nullopt;
+  }
+
   Options opt_;
+  ht::EventLog events_;
   ht::Settings settings_;
   ht::SlideStore slide_;
   ht::DrmOutput out_;
@@ -513,9 +587,11 @@ class App {
   unsigned still_version_ = 0;  // slide version drawn, when still_ == Slide
   std::string mode_warning_;
   Clock::time_point next_stats_ = Clock::now() + kStatsEvery;
+  Clock::time_point stats_from_ = Clock::now();  // start of the current rate window
   long captured_ = 0, shown_ = 0, snapshot_count_ = 0;
   long long rga_us_total_ = 0, rga_us_max_ = 0;
-  double fps_in_ = 0;
+  double fps_in_ = 0, fps_shown_ = 0, rga_avg_ms_ = 0, rga_max_ms_ = 0;
+  long starts_total_ = 0, losses_total_ = 0, resyncs_total_ = 0;  // since the app started
 };
 
 }  // namespace
