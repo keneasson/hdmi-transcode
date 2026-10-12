@@ -8,20 +8,35 @@ bookworm image, see `docs/bringup.md`); cross-compiling comes with the Buildroot
 ```sh
 # one-time: toolchain + libdrm headers. libdrm-dev comes from bookworm-backports
 # because the Radxa image ships a newer libdrm2 than Debian main's -dev package.
-sudo apt-get install -y build-essential cmake pkg-config libudev-dev
+sudo apt-get install -y build-essential cmake pkg-config libudev-dev librga-dev
 sudo apt-get install -y -t bookworm-backports libdrm-dev libdrm-tests
 
 cmake -S . -B build && cmake --build build -j4
 ctest --test-dir build --output-on-failure     # no display needed
 ```
 
-From the Mac, push a working copy to the board (it has no rsync):
+From the Mac, push a working copy to the board (it has no rsync); the board's `build/`
+tree is kept so incremental builds stay fast:
 
 ```sh
-tar -czf - software | ssh radxa@<board> 'rm -rf ~/hdmi-transcode/software && mkdir -p ~/hdmi-transcode && tar -xzf - -C ~/hdmi-transcode'
+tar -czf - --exclude build software | ssh radxa@<board> 'mkdir -p ~/hdmi-transcode/software && cd ~/hdmi-transcode/software && rm -rf src tests CMakeLists.txt && tar -xzf - -C ~/hdmi-transcode'
 ```
 
 ## Run
+
+The application (capture → RGA → display):
+
+```sh
+sudo build/hdmi-transcode                                # automatic mode, compress
+sudo build/hdmi-transcode --mode 1280x800@60 --aspect letterbox
+sudo build/hdmi-transcode --snapshot /run/frame.ppm      # saves the 120th shown frame
+```
+
+It logs the output mode, input changes, and every 10 s: input fps, shown fps and RGA time.
+With no input it shows the test pattern labelled NO INPUT. Only one process may use the
+capture device at a time (N8): stop the app before running `v4l2-ctl` streaming.
+
+The test-pattern tool:
 
 The program needs to be DRM master, so nothing else may own the display (the image's
 desktop is disabled: `systemctl disable --now gdm`, default target `multi-user`).
@@ -49,6 +64,11 @@ echo detect | sudo tee /sys/class/drm/card0-HDMI-A-1/status   # back to the real
 - `src/mode_select.*`: the mode choice (R2, R2a): request → EDID preferred → fallback
   ladder 1280x800 / 1024x768 / 640x480 @60 → anything progressive → built-in 1280x800.
 - `src/hotplug.*`: udev listener for DRM hotplug events (R2b).
+- `src/aspect.*`: where the picture goes for each aspect mode (R3), pure geometry.
+- `src/capture.*`, `src/capture_edid.h`: V4L2 capture via TC358743 + ISP, our upstream
+  EDID (R6, R7, N8).
+- `src/rga_scaler.*`: RGA scale + YUV→RGB into the scanout buffer, black bars (N2).
+- `src/app_main.cpp`: the `hdmi-transcode` event loop.
 - `src/test_pattern.*`: the generated test pattern (R4), pure drawing into a `Surface`.
 - `src/pattern_main.cpp`: the `hdmi-transcode-pattern` tool.
 - `tests/`: unit tests for the pattern, EDID parsing and mode choice (fixture: the

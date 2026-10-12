@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "check.h"
+#include "capture.h"
 #include "edid.h"
 #include "mode_select.h"
 #include "syncmaster2433_edid.h"
@@ -142,6 +143,20 @@ void same_timing_cases() {
   CHECK(!ht::same_timing(a, b));
 }
 
+void capture_edid_is_valid_and_prefers_1080p60() {
+  const auto& e = ht::capture_edid();
+  CHECK(e.size() == 256);
+  for (int block = 0; block < 2; ++block) {
+    uint8_t sum = 0;
+    for (int i = 0; i < 128; ++i) sum = static_cast<uint8_t>(sum + e[block * 128 + i]);
+    CHECK(sum == 0);
+  }
+  CHECK(e[126] == 1);     // one extension block
+  CHECK(e[128] == 0x02);  // CTA-861
+  auto t = ht::edid_preferred_timing(e);
+  CHECK(t && t->width == 1920 && t->height == 1080 && t->refresh_mhz() == 60000);
+}
+
 void parse_mode_cases() {
   auto a = ht::parse_mode("1280x800@60");
   CHECK(a && a->width == 1280 && a->height == 800 && a->refresh == 60);
@@ -169,6 +184,7 @@ int main() {
   fallback_timings_are_60hz();
   describe_formats_fractional_rates();
   same_timing_cases();
+  capture_edid_is_valid_and_prefers_1080p60();
   parse_mode_cases();
   return finish();
 }

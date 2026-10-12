@@ -71,8 +71,10 @@ void update(ht::DrmOutput& out, const std::optional<ht::ModeRequest>& req) {
     std::fprintf(stderr, "requested mode not available; using the automatic choice\n");
   out.set_mode(choice.mode);
   out.keep_awake();
-  ht::Surface s = out.surface();
+  const int buf = out.acquire();
+  ht::Surface s = out.surface(buf);
   ht::draw_test_pattern(s, ht::describe(choice.mode));
+  out.present(buf);
   std::printf("showing test pattern at %s (%s)\n", ht::describe(choice.mode).c_str(),
               choice.reason.c_str());
 }
@@ -134,11 +136,12 @@ int main(int argc, char** argv) {
         if (left.count() <= 0) break;
         timeout_ms = static_cast<int>(left.count());
       }
-      pollfd fds[2] = {{sfd, POLLIN, 0}, {hotplug.fd(), POLLIN, 0}};
-      const int n = poll(fds, 2, timeout_ms);
+      pollfd fds[3] = {{sfd, POLLIN, 0}, {hotplug.fd(), POLLIN, 0}, {out.fd(), POLLIN, 0}};
+      const int n = poll(fds, 3, timeout_ms);
       if (n < 0 && errno == EINTR) continue;
       if (n < 0) throw std::runtime_error(std::string("poll: ") + std::strerror(errno));
       if (fds[0].revents & POLLIN) break;
+      if (fds[2].revents & POLLIN) out.handle_events();
       if ((fds[1].revents & POLLIN) && hotplug.drain()) {
         out.probe();
         update(out, req);
