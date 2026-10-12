@@ -147,16 +147,19 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 - ATEM Mini frame rate in use (59.94 vs 50) — read from the bridge once connected.
   (A Mac laptop source measured 1080p 60.00 on 2026-10-11; the ATEM is still to measure.)
 - ~~Zero 3W CSI lane count~~ **Answered 2026-10-11:** 4 lanes in use; 1080p60 captured.
-- **General-market scope (from 2026-10-11):**
-  - Audio. DVI sinks have none (N3), but an HDMI TV or display on the split leg would
-    expect it. The C790 carries I2S audio and Radxa ships a `tc358743-audio` overlay;
-    in scope for the general product or not?
-  - Inputs above 1080p60. The TC358743 tops out at 1080p60 (165 MHz); a 4K source must
-    be told (via our EDID) that 1080p is the best this leg takes. Fine for the splitter
-    case, since the splitter handles the 4K sink; confirm that is acceptable.
-  - HDCP. Protected sources (streaming apps, Blu-ray) won't send to the TC358743; the
-    box shows the test pattern / a "protected content" notice instead. Never in scope
-    to strip HDCP.
+- **General-market scope (from 2026-10-11).** Decided by Ken 2026-10-11 ("for now, all
+  are acceptable"):
+  - ~~Audio~~ **Out of scope for now.** No audio on the output, HDMI sinks included.
+    (The C790 carries I2S and Radxa ships a `tc358743-audio` overlay, if this changes.)
+  - ~~Inputs above 1080p60~~ **Accepted limit.** Our EDID tells sources 1080p60 is the
+    best this leg takes; the splitter serves any 4K sink on the other leg.
+  - **HDCP: for now, protected content is not shown;** the box shows the test pattern /
+    a "protected content" notice. Long-term ideal: the box as a *smart pass-through* that
+    carries HDCP through, i.e. receives it and re-applies it on the output, never
+    stripping it. That needs an HDCP licence and legal advice first, so it is **not an
+    immediate requirement**. Hardware notes, unverified: the board's HDMI TX logs
+    "DWC HDMI 2.0 TX with HDCP"; whether the TC358743 path can act as an HDCP receiver
+    on this board is unknown.
   - Bench display: the SyncMaster 2433 is a **1920x1200 (16:10) panel** (EDID DTD1
     1920x1200@59.95, 154 MHz, 518x324 mm, made 2009), the same aspect as the NP3151W,
     so it is a faithful stand-in at 1280x800. The board's kernel does not mark that mode
