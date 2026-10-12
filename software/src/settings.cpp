@@ -1,23 +1,33 @@
 #include "settings.h"
 
-#include <cerrno>
-#include <cstring>
-#include <fstream>
 #include <sstream>
-#include <stdexcept>
 
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include "file_util.h"
 
 namespace ht {
+
+const char* to_string(Show s) {
+  switch (s) {
+    case Show::Input: return "input";
+    case Show::Slide: return "slide";
+    case Show::Pattern: return "pattern";
+  }
+  return "input";
+}
+
+std::optional<Show> parse_show(const std::string& s) {
+  if (s == "input") return Show::Input;
+  if (s == "slide") return Show::Slide;
+  if (s == "pattern") return Show::Pattern;
+  return std::nullopt;
+}
 
 bool Settings::operator==(const Settings& o) const {
   const bool same_mode =
       mode.has_value() == o.mode.has_value() &&
       (!mode || (mode->width == o.mode->width && mode->height == o.mode->height &&
                  mode->refresh == o.mode->refresh));
-  return same_mode && aspect == o.aspect && force_pattern == o.force_pattern;
+  return same_mode && aspect == o.aspect && show == o.show;
 }
 
 std::string mode_to_string(const std::optional<ModeRequest>& m) {
@@ -31,7 +41,7 @@ std::string serialize(const Settings& s) {
   std::string out = "# hdmi-transcode settings (written by the box; edit with care)\n";
   out += "mode=" + mode_to_string(s.mode) + "\n";
   out += std::string("aspect=") + to_string(s.aspect) + "\n";
-  out += std::string("test_pattern=") + (s.force_pattern ? "on" : "off") + "\n";
+  out += std::string("show=") + to_string(s.show) + "\n";
   return out;
 }
 
@@ -52,43 +62,23 @@ Settings parse_settings(const std::string& text) {
         s.mode = m;
     } else if (key == "aspect") {
       if (auto a = parse_aspect(value)) s.aspect = *a;
-    } else if (key == "test_pattern") {
-      if (value == "on") s.force_pattern = true;
-      if (value == "off") s.force_pattern = false;
+    } else if (key == "show") {
+      if (auto v = parse_show(value)) s.show = *v;
+    } else if (key == "test_pattern") {  // written before `show` existed
+      if (value == "on") s.show = Show::Pattern;
+      if (value == "off") s.show = Show::Input;
     }
   }
   return s;
 }
 
 Settings load_settings(const std::string& path) {
-  std::ifstream f(path);
-  if (!f) return {};
-  std::stringstream ss;
-  ss << f.rdbuf();
-  return parse_settings(ss.str());
+  const auto text = read_file(path);
+  return text ? parse_settings(*text) : Settings{};
 }
 
 void save_settings(const std::string& path, const Settings& s) {
-  const std::string tmp = path + ".tmp";
-  const std::string data = serialize(s);
-  const auto slash = path.rfind('/');
-  const std::string dir = slash == std::string::npos ? "." : path.substr(0, slash);
-  ::mkdir(dir.c_str(), 0755);  // first save on a fresh system; EEXIST is fine
-  const int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-  if (fd < 0) throw std::runtime_error("save settings: " + tmp + ": " + std::strerror(errno));
-  const bool ok = ::write(fd, data.data(), data.size()) == static_cast<ssize_t>(data.size()) &&
-                  ::fsync(fd) == 0;
-  const int err = errno;
-  ::close(fd);
-  if (!ok || ::rename(tmp.c_str(), path.c_str()) != 0) {
-    ::unlink(tmp.c_str());
-    throw std::runtime_error("save settings: " + path + ": " + std::strerror(ok ? errno : err));
-  }
-  const int dfd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-  if (dfd >= 0) {
-    ::fsync(dfd);  // make the rename itself durable
-    ::close(dfd);
-  }
+  write_file_atomic(path, serialize(s));
 }
 
 }  // namespace ht

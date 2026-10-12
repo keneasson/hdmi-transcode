@@ -8,7 +8,7 @@ bookworm image, see `docs/bringup.md`); cross-compiling comes with the Buildroot
 ```sh
 # one-time: toolchain + libdrm headers. libdrm-dev comes from bookworm-backports
 # because the Radxa image ships a newer libdrm2 than Debian main's -dev package.
-sudo apt-get install -y build-essential cmake pkg-config libudev-dev librga-dev
+sudo apt-get install -y build-essential cmake pkg-config libudev-dev librga-dev libpng-dev
 sudo apt-get install -y -t bookworm-backports libdrm-dev libdrm-tests
 
 cmake -S . -B build && cmake --build build -j4
@@ -29,19 +29,31 @@ The application (capture → RGA → display):
 ```sh
 sudo build/hdmi-transcode                                # automatic mode, compress
 sudo build/hdmi-transcode --mode 1280x800@60 --aspect letterbox
-sudo build/hdmi-transcode --snapshot /run/frame.ppm      # saves the 120th shown frame
+sudo build/hdmi-transcode --snapshot /run/frame.ppm      # 120th video frame, every still
 ```
 
 It logs the output mode, input changes, and every 10 s: input fps, shown fps and RGA time.
 
-**Configuration page** (R9, R12): `http://<box>/` from a phone or laptop on the same
-network: picture shape, projector resolution (Automatic recommended), test pattern. Changes
-apply immediately and are saved to `/var/lib/hdmi-transcode/settings` (R5). The JSON API
-behind it: `GET /api/status`; `POST /api/settings` (form fields `aspect`, `mode`,
-`test_pattern`; requires the header `X-HT-Request: 1`). Only private-network clients are
-served (R11a).
-With no input it shows the test pattern labelled NO INPUT. Only one process may use the
-capture device at a time (N8): stop the app before running `v4l2-ctl` streaming.
+**Configuration page** (R9, R12, R13): `http://<box>/` from a phone or laptop on the same
+network: what the projector shows (live / slide / test pattern), picture shape, projector
+resolution (Automatic recommended), and the slide editor. Changes apply immediately and
+are saved to `/var/lib/hdmi-transcode/settings` (R5); the slide is
+`/var/lib/hdmi-transcode/slide.png` plus `slide.json` (the page's description of it, for
+editing; `--slide-dir` moves both). The JSON API behind it:
+- `GET /api/status`
+- `POST /api/settings`: form fields `aspect`, `mode`, `show` (`input|slide|pattern`)
+- `GET /api/slide`: the saved description, or `null`
+- `POST /api/slide`: form fields `png` (base64 or a `data:` URL, ≤ 4 MB, ≤ 4096 px a
+  side) and `spec`; `DELETE /api/slide` removes it
+
+Changes need the header `X-HT-Request: 1`. Only private-network clients are served
+(R11a). The page draws the slide itself (canvas, at the projector's resolution) and
+uploads the picture; the box only decodes and shows PNGs. New slide part types go in
+`PARTS` in `src/web_page.h`.
+
+With no input it shows the slide, or the test pattern labelled NO INPUT if there is no
+slide. Only one process may use the capture device at a time (N8): stop the app before
+running `v4l2-ctl` streaming.
 
 The test-pattern tool:
 
@@ -89,8 +101,11 @@ hdmi-transcode && sudo systemctl unmask getty@tty1`, and restore
 - `src/capture.*`, `src/capture_edid.h`: V4L2 capture via TC358743 + ISP, our upstream
   EDID (R6, R7, N8).
 - `src/rga_scaler.*`: RGA scale + YUV→RGB into the scanout buffer, black bars (N2).
-- `src/settings.*`: persisted settings, atomic save (R5).
-- `src/http_server.*`, `src/web_page.h`: the configuration page and its API (R9, R11a, R12).
+- `src/settings.*`: persisted settings (R5); `src/file_util.*`: atomic file save.
+- `src/slide.*`: the slide store, PNG decoding (libpng), fitting a picture to the screen
+  (R13).
+- `src/http_server.*`, `src/web_page.h`: the configuration page, slide editor and API
+  (R9, R11a, R12, R13).
 - `src/app_main.cpp`: the `hdmi-transcode` event loop.
 - `packaging/`: systemd unit, defaults file, board install script.
 - `src/test_pattern.*`: the generated test pattern (R4), pure drawing into a `Surface`.
