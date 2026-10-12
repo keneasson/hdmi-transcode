@@ -7,11 +7,13 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 
 | Item | Value | Date |
 |---|---|---|
-| `/proc/device-tree/model` | | |
-| Image file name | | |
-| `uname -r` | | |
-| Default user changed | no | |
-| Boot medium (SD / eMMC) | | |
+| `/proc/device-tree/model` | `Radxa ZERO 3`; compatible `radxa,zero3w-aic8800ds2 radxa,zero3 rockchip,rk3566` (both boards) | 2026-10-11 |
+| Image file name | `radxa-zero3_bookworm_kde_b1` (+ `prepare-firstboot.sh`) | 2026-10-11 |
+| `uname -r` | `6.1.84-10-rk2410-nocsf` | 2026-10-11 |
+| Default user changed | no (`radxa`/`radxa`; SSH key installed for `radxa`) | 2026-10-11 |
+| Boot medium (SD / eMMC) | SD (`mmcblk1`). Board A boots the SD card fine even with its factory eMMC system present (different UUIDs, no clash) | 2026-10-11 |
+| WiFi chip | AIC8800DS2 (`aic8800_fdrv`), joined `Easson` via `before.txt` on first boot | 2026-10-11 |
+| Status LED | heartbeat (double flash, pause) when running; **black screen + LED off does not mean hung** on this image | 2026-10-11 |
 
 ## Zero 3W ports (from Radxa docs, https://docs.radxa.com/en/zero/zero3, 2026-10-05)
 
@@ -70,6 +72,11 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 
 ## CSI / camera connector (bringup §5d–5e)
 
+Connector is on the board's **underside** (same side as the eMMC). Cable seated with
+pin-1 marks (triangle on both PCBs, "1" on both cable ends) aligned; C790 green LED
+lights from the Zero's supply through the cable (2026-10-11).
+
+
 | Item | Value | Date |
 |---|---|---|
 | Camera connector pin count | 22-pin 0.5 mm, confirmed by eye: `CSI` FPC on the short edge at the HDMI end, contacts toward the board | 2026-10-05 |
@@ -89,8 +96,12 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 
 | Item | Value | Date |
 |---|---|---|
-| TC358743 seen on I2C bus / address | | |
-| `/dev/video*` and `/dev/v4l-subdev*` created | | |
+| Kernel driver | Rockchip `tc35874x` built in (`CONFIG_VIDEO_TC35874X=y`); upstream `CONFIG_VIDEO_TC358743` not set. Also built in: `rkcif`, `rkisp`, `csi2-dphy`, RGA | 2026-10-11 |
+| Overlay | `radxa-zero3-tc358743` (in `/boot/dtbo`, shipped disabled): I2C2 @ `0x0f`, **4 data lanes**, routed csi2-dphy0 → **rkisp** (not rkcif). Enabled by renaming `.dtbo.disabled` → `.dtbo` + `u-boot-update`; backup `extlinux.conf.pre-tc358743` | 2026-10-11 |
+| TC358743 seen on I2C bus / address | yes: `2-000f`, "tc358743 found", `Lanes in use: 4`, CSI out `YCbCr 422 16-bit`. Without the C790 attached the driver still binds and logs `i2c_rd ... failed` (boot is unaffected) | 2026-10-11 |
+| `+5V` cable detect | **always "yes" on the C790, even with nothing plugged in** (board back-powers the HDMI 5V). Can't be used for input presence: use TMDS / stable-sync status instead (R5) | 2026-10-11 |
+| EDID | chip starts with **none**; sources won't transmit until one is loaded (`v4l2-ctl -d <subdev> --set-edid=type=hdmi` worked; volatile, gone on reboot) | 2026-10-11 |
+| `/dev/video*` and `/dev/v4l-subdev*` created | `/dev/media0`; subdevs: rkisp-isp, rkisp-csi, csi2-dphy0, `m00_b_tc35874x 2-000f`; `/dev/video0..` rkisp mainpath/selfpath/rawwr | 2026-10-11 |
 | `--query-dv-timings` result (this answers the ATEM frame rate) | | |
 | GStreamer smoke test showed a picture? | | |
 
