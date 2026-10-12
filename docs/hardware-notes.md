@@ -105,6 +105,67 @@ lights from the Zero's supply through the cable (2026-10-11).
 | `--query-dv-timings` result (this answers the ATEM frame rate) | Mac laptop as source (not yet the ATEM): 1920x1080p **60.00**, 148.5 MHz, VIC 16, YCbCr 4:4:4 BT.709 limited, 8-bit, no HDCP. ATEM rate still to measure | 2026-10-11 |
 | GStreamer smoke test showed a picture? | not run yet. **Raw capture works:** `v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=NV12 --stream-mmap=4 --stream-count=30` (rkisp mainpath) gave 30 × 3 110 400-byte NV12 frames; a frame converted on the Mac showed the source desktop with correct colour. Graph: csi-subdev UYVY8_2X8 1920x1080 → isp → mainpath; formats UYVY/NV16/NV12/NV21 etc. Board A (4 GB) | 2026-10-11 |
 
+## Splitter: MuxLab 100506 (1x4 HDMI, 4K60), tested 2026-10-12
+
+EDID rotary switch, from MuxLab's 100506 quick installation guide
+(https://muxlab.com/wp-content/uploads/2022/10/SE-000932-A-100506-Man-1X4-HDMI-Splitter-4K60_v3.pdf).
+The guide sets the switch before power is connected; change it with the splitter unpowered
+or power-cycle it afterwards.
+
+| Pos | EDID sent to the source |
+|---|---|
+| 0 | Auto (mix of the connected displays' EDIDs) |
+| 1 | 4K60, 7.1 audio |
+| 2 | 4K60, 2.0 audio |
+| 3 | 4K30, 7.1 audio |
+| 4 | 4K30, 2.0 audio |
+| 5 | 1080p, 3D, 12-bit, 7.1 audio |
+| **6** | **1080p, 8-bit, 2.0 audio**: use this one |
+| 7 | 1080i, 7.1 audio |
+| 8 | 1080i, 2.0 audio |
+| 9 | copy output 1's EDID unchanged |
+
+Observed with a MacBook Pro as the source:
+- Pos 0 with only an ASUS PB278 attached: the Mac saw the ASUS's own EDID and sent
+  2560x1440 (241.5 MHz), which the TC358743 cannot take. With the box also attached:
+  a mixed "ITE-Splitter" EDID, 1080p.
+- Pos 1 is a fixed **4K60** EDID (the project notes previously called it "locked at
+  1080p"): the ASUS went dark and the box could not have taken it either.
+- Pos 6: the Mac sees "SAMSUNG", max 1920x1200 / 162 MHz, and sends 1080p60. The
+  splitter's built-in EDIDs carry a Samsung TV identity.
+
+**The splitter keeps resetting its link to the C790** (all four outputs, with or
+without other displays; switch position irrelevant). TC358743 `SYS_STATUS` (0x8520) read
+over I2C cycles every 0.6 to 1 s: good `0x9f`, then **AV-mute set** `0xdf`, ~60 ms later
+**TMDS off** `0x59`, back `0x5f`, sync `0xdf`, unmute `0x9f`, good for ~100-150 ms. The
+transmitter blanks and restarts on purpose; the box gets ~20 of 60 fps. The same Mac
+straight into the C790 is solid at 60 fps, and the ASUS behind the splitter is fine.
+`HDCP_INT` (0x8508) showed AN/AKSV received but never R0/KM: the splitter **started an
+HDCP handshake** at connection and it never completed (the driver leaves the TC358743's
+HDCP receiver off, `pdata.enable_hdcp = false`). After clearing the flags no new
+handshakes appeared during the resets. Ken reports the ATEM Mini showed the same flicker
+behind this splitter and not without it: both are capture sinks without HDCP.
+Ruled out by test the same day:
+- **HDCP:** with the TC358743 HDCP receiver enabled by hand (the driver's enable values:
+  `HDCP_MODE` 0x8560 = 0x24, `HDCP_REG1` 0x8563 = 0x11, `HDCP_REG2` 0x8564 = 0x0f,
+  `KEY_RD_CMD`) and the cable re-plugged, the splitter attempted **no** handshake and
+  the resets continued. The stale AN/AKSV flags most likely came from the Mac, which
+  probes HDCP when plugged in directly. (Restored: 0x26 / 0x00 / 0x00.)
+- **EDID:** the box's EDID, the ASUS's, and `v4l2-ctl --set-edid=type=hdmi` all gave
+  the same ~2 resets per second.
+- **Port / load / switch position:** all four outputs, with and without the ASUS,
+  positions 0 and 6.
+
+What remains is electrical between the splitter's transmitter and the C790: the C790's
++5 V back-power into the splitter output, or the transmitter's receiver-presence
+(termination / RxSense) check not being satisfied. Ken's ATEM Mini flickered the same way
+behind this splitter. Next: a +5 V (pin 18) blocker at the C790, an inline HDMI
+repeater, or a different splitter.
+
+Reading TC358743 registers without the driver's help (no `CONFIG_VIDEO_ADV_DEBUG`):
+`i2ctransfer -f -y 2 w2@0x0f 0x85 0x20 r1` (16-bit address, high byte first). Driver
+debug log: `echo 3 > /sys/module/tc35874x/parameters/debug`.
+
 ## Gotchas discovered
 
 Free-form, newest first. Anything that cost more than ten minutes goes here.

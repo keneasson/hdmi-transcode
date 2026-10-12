@@ -59,6 +59,8 @@ class Capture {
   void requeue(int index);
 
   const std::string& description() const { return description_; }
+  // Timing being captured (valid while streaming).
+  const InputTiming& timing() const { return timing_; }
 
  private:
   struct Buf {
@@ -70,6 +72,7 @@ class Capture {
   int video_fd_ = -1;
   std::vector<std::string> isp_subdevs_;  // "/dev/v4l-subdevN" for rkisp-isp / rkisp-csi
   std::vector<Buf> bufs_;
+  InputTiming timing_{};
   bool streaming_ = false;
   int width_ = 0, height_ = 0, stride_ = 0, plane_height_ = 0;
   std::string description_;

@@ -195,6 +195,7 @@ void Capture::start(const InputTiming& in) {
     throw;
   }
   streaming_ = true;
+  timing_ = in;
   char d[64];
   std::snprintf(d, sizeof d, "%dx%d%c%.2f", in.width, in.height, in.interlaced ? 'i' : 'p',
                 in.refresh_mhz / 1000.0);

@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <exception>
 #include <fstream>
 #include <optional>
@@ -50,6 +51,15 @@ using Clock = std::chrono::steady_clock;
 constexpr auto kFrameTimeout = std::chrono::milliseconds(500);
 // How often to look for a signal while there is none.
 constexpr int kNoSignalRetryMs = 1000;
+// After live video drops, keep the last frame on screen this long before switching to
+// the slide / test pattern, looking for the signal again every kHoldRetryMs meanwhile.
+// Rides through brief upstream glitches (a splitter re-syncing) without a visible flash.
+constexpr auto kHoldLast = std::chrono::seconds(2);
+constexpr int kHoldRetryMs = 200;
+// Restart back-off for an input that keeps dropping (see restart_capture).
+constexpr size_t kMaxRestarts = 10;
+constexpr auto kRestartWindow = std::chrono::seconds(30);
+constexpr auto kBackoff = std::chrono::seconds(5);
 constexpr auto kStatsEvery = std::chrono::seconds(10);
 
 struct Options {
@@ -130,10 +140,7 @@ class App {
         out_.probe();
         update_output();
       }
-      if ((fds[3].revents & POLLPRI) && cap_.source_changed()) {
-        std::printf("input changed\n");
-        restart_capture();
-      }
+      if ((fds[3].revents & POLLPRI) && cap_.source_changed()) on_source_change();
       if (fds[4].revents & POLLIN) on_frames();
       web_.on_events(fds, web_first);
 
@@ -144,6 +151,13 @@ class App {
         restart_capture();
       } else if (!cap_.streaming() && Clock::now() >= next_retry_) {
         restart_capture();
+      }
+      if (holding_ && Clock::now() - lost_at_ >= kHoldLast) {
+        holding_ = false;
+        std::printf("no input signal for %lld s; showing the %s\n",
+                    static_cast<long long>(kHoldLast.count()),
+                    slide_.has_slide() ? "slide" : "test pattern");
+        show_still();
       }
     }
   }
@@ -160,6 +174,7 @@ class App {
     const auto now = Clock::now();
     auto until = cap_.streaming() ? last_frame_ + kFrameTimeout : next_retry_;
     if (next_stats_ < until) until = next_stats_;
+    if (holding_ && lost_at_ + kHoldLast < until) until = lost_at_ + kHoldLast;
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(until - now).count();
     ms = ms < 0 ? 0 : ms + 1;
     const int web = web_.next_timeout_ms();
@@ -172,10 +187,13 @@ class App {
         std::chrono::duration<double>(Clock::now() - (next_stats_ - kStatsEvery)).count();
     fps_in_ = captured_ / secs;
     if (captured_)
-      std::printf("stats: in %.1f fps, shown %.1f fps, rga %.2f ms avg / %.2f ms max\n",
+      std::printf("stats: in %.1f fps, shown %.1f fps, rga %.2f ms avg / %.2f ms max%s\n",
                   captured_ / secs, shown_ / secs, shown_ ? rga_us_total_ / 1000.0 / shown_ : 0,
-                  rga_us_max_ / 1000.0);
-    captured_ = shown_ = 0;
+                  rga_us_max_ / 1000.0,
+                  blips_ ? (", " + std::to_string(blips_) + " input re-syncs ridden through")
+                               .c_str()
+                         : "");
+    captured_ = shown_ = blips_ = 0;
     rga_us_total_ = rga_us_max_ = 0;
     next_stats_ = Clock::now() + kStatsEvery;
   }
@@ -205,30 +223,83 @@ class App {
     if (!cap_.streaming() || settings_.show != ht::Show::Input) show_still();
   }
 
-  // Input side: stop fully, look for a signal, start again (N8, R6).
+  // The bridge reports a source change. If the timing is the one already being captured
+  // (a splitter or cable glitch re-syncing the same signal), keep streaming: frames
+  // either keep coming or the frame timeout restarts capture. Only a real change of
+  // timing restarts straight away.
+  void on_source_change() {
+    if (cap_.streaming()) {
+      const auto t = cap_.detect();
+      const auto& cur = cap_.timing();
+      // Mid-resync the bridge can report the right size with a 0 Hz rate: same signal.
+      if (t && t->width == cur.width && t->height == cur.height &&
+          t->interlaced == cur.interlaced &&
+          (t->refresh_mhz == cur.refresh_mhz || t->refresh_mhz == 0)) {
+        ++blips_;
+        return;
+      }
+    }
+    if (!backing_off_) std::printf("input changed\n");
+    restart_capture();
+  }
+
+  // Live video was on screen and is gone: hold the last frame for kHoldLast (R8 still
+  // applies after that), retrying quickly meanwhile.
+  void lost_signal() {
+    if (still_ == Still::None && out_.active() && !holding_) {
+      holding_ = true;
+      lost_at_ = Clock::now();
+    }
+    if (!holding_) show_still();
+    if (backing_off_ && !restarts_.empty())
+      next_retry_ = restarts_.back() + kBackoff;  // fixed to the last start
+    else
+      next_retry_ = Clock::now() + std::chrono::milliseconds(holding_ ? kHoldRetryMs
+                                                                      : kNoSignalRetryMs);
+  }
+
+  // Input side: stop fully, look for a signal, start again (N8, R6). An input that keeps
+  // coming and going (a splitter resetting its link every second) is started at most
+  // every kBackoff once it has been started kMaxRestarts times within kRestartWindow:
+  // rapid stop/start cycles of the ISP are what N8 warns about. Only actual starts count,
+  // so a cable pull (fast retries while nothing is there) never triggers the back-off.
   void restart_capture() {
+    const auto now = Clock::now();
+    while (!restarts_.empty() && now - restarts_.front() > kRestartWindow) restarts_.pop_front();
     cap_.stop();
     const auto t = cap_.detect();
     if (!t || t->interlaced) {
-      if (had_signal_ || first_)
+      if ((had_signal_ || first_) && !holding_ && still_ != Still::None)
         std::printf("no input signal; showing the %s\n",
                     slide_.has_slide() ? "slide" : "test pattern");
       had_signal_ = false;
       first_ = false;
-      show_still();
-      next_retry_ = Clock::now() + std::chrono::milliseconds(kNoSignalRetryMs);
+      lost_signal();
       return;
+    }
+    if (backing_off_ && !restarts_.empty() && now - restarts_.back() < kBackoff) {
+      lost_signal();  // signal present, but too soon after the last start
+      return;
+    }
+    restarts_.push_back(now);
+    if (restarts_.size() > kMaxRestarts && !backing_off_) {
+      backing_off_ = true;
+      std::printf("input unstable (%zu starts in %lld s); starting it at most every %lld s\n",
+                  restarts_.size(), static_cast<long long>(kRestartWindow.count()),
+                  static_cast<long long>(kBackoff.count()));
+    } else if (restarts_.size() <= kMaxRestarts / 2) {
+      backing_off_ = false;
     }
     try {
       cap_.start(*t);
     } catch (const std::exception& e) {
       std::printf("input %dx%d: cannot capture (%s)\n", t->width, t->height, e.what());
-      show_still();
-      next_retry_ = Clock::now() + std::chrono::milliseconds(kNoSignalRetryMs);
+      lost_signal();
       return;
     }
     had_signal_ = true;
     first_ = false;
+    holding_ = false;
     last_frame_ = Clock::now();
     std::printf("input %s\n", cap_.description().c_str());
   }
@@ -431,6 +502,11 @@ class App {
   Clock::time_point last_frame_{};
   Clock::time_point next_retry_{};
   bool had_signal_ = false;
+  std::deque<Clock::time_point> restarts_;  // recent capture starts (back-off)
+  bool backing_off_ = false;
+  bool holding_ = false;  // signal lost, last frame still on screen (kHoldLast)
+  Clock::time_point lost_at_{};
+  long blips_ = 0;
   bool first_ = true;
   enum class Still { None, Pattern, Slide };
   Still still_ = Still::None;  // still picture on screen (None: live video); don't redraw it
