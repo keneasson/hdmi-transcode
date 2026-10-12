@@ -12,34 +12,30 @@
 
 #include <xf86drmMode.h>
 
+#include "mode_select.h"
 #include "test_pattern.h"
 
 namespace ht {
 
-struct ModeRequest {
-  int width = 0;      // 0 = use the display's preferred mode
-  int height = 0;
-  int refresh = 0;    // 0 = any
-};
-
-// Parses "1280x800" or "1280x800@60". Returns nullopt on malformed input.
-std::optional<ModeRequest> parse_mode(const std::string& s);
-
 class DrmOutput {
  public:
-  // Opens the first DRM card that has a connected HDMI-A connector. Throws
+  // Opens the DRM card and its connected HDMI-A connector (a display with no or a broken
+  // EDID may offer no modes; that is allowed, see choose_mode()). Throws
   // std::runtime_error with a reason on failure (no display, not master, ...).
   explicit DrmOutput(const std::string& device = "/dev/dri/card0");
   ~DrmOutput();
   DrmOutput(const DrmOutput&) = delete;
   DrmOutput& operator=(const DrmOutput&) = delete;
 
-  // Modes the display offers, in connector order (preferred first on most sinks).
+  // Modes the display offers, in connector order. May be empty.
   const std::vector<drmModeModeInfo>& modes() const { return modes_; }
 
-  // Picks a mode (exact match for `req`, else preferred, else first), allocates a
-  // scanout buffer for it and programs the CRTC. Returns the mode used.
-  const drmModeModeInfo& set_mode(const ModeRequest& req);
+  // The connector's raw EDID blob; empty if the display provided none.
+  const std::vector<uint8_t>& edid() const { return edid_; }
+
+  // Allocates a scanout buffer for `mode` and programs the CRTC. The mode need not be in
+  // modes() (built-in fallback timings for displays without a usable EDID).
+  void set_mode(const drmModeModeInfo& mode);
 
   // CPU view of the scanout buffer; valid after set_mode().
   Surface surface();
@@ -47,15 +43,15 @@ class DrmOutput {
   // Forces the connector's DPMS to On (N6: the output never sleeps).
   void keep_awake();
 
-  static std::string describe(const drmModeModeInfo& m);
-
  private:
   void destroy_buffer();
+  void read_edid();
 
   int fd_ = -1;
   uint32_t connector_id_ = 0;
   uint32_t crtc_id_ = 0;
   std::vector<drmModeModeInfo> modes_;
+  std::vector<uint8_t> edid_;
   drmModeModeInfo mode_{};
   drmModeCrtc* saved_crtc_ = nullptr;
 

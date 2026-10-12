@@ -27,27 +27,7 @@ using ResPtr = std::unique_ptr<drmModeRes, ResFree>;
 using ConnPtr = std::unique_ptr<drmModeConnector, ConnFree>;
 using EncPtr = std::unique_ptr<drmModeEncoder, EncFree>;
 
-int refresh_hz(const drmModeModeInfo& m) {
-  if (m.htotal == 0 || m.vtotal == 0) return static_cast<int>(m.vrefresh);
-  return static_cast<int>((m.clock * 1000.0) / (double(m.htotal) * m.vtotal) + 0.5);
-}
-
 }  // namespace
-
-std::optional<ModeRequest> parse_mode(const std::string& s) {
-  ModeRequest r;
-  char tail = 0;
-  if (std::sscanf(s.c_str(), "%dx%d@%d%c", &r.width, &r.height, &r.refresh, &tail) == 3 ||
-      std::sscanf(s.c_str(), "%dx%d%c", &r.width, &r.height, &tail) == 2) {
-    if (r.width > 0 && r.height > 0 && r.refresh >= 0) return r;
-  }
-  return std::nullopt;
-}
-
-std::string DrmOutput::describe(const drmModeModeInfo& m) {
-  return std::to_string(m.hdisplay) + "x" + std::to_string(m.vdisplay) + " @ " +
-         std::to_string(refresh_hz(m)) + "Hz";
-}
 
 DrmOutput::DrmOutput(const std::string& device) {
   fd_ = ::open(device.c_str(), O_RDWR | O_CLOEXEC);
@@ -65,12 +45,13 @@ DrmOutput::DrmOutput(const std::string& device) {
     for (int i = 0; i < res->count_connectors && !conn; ++i) {
       ConnPtr c(drmModeGetConnector(fd_, res->connectors[i]));
       if (c && c->connector_type == DRM_MODE_CONNECTOR_HDMIA &&
-          c->connection == DRM_MODE_CONNECTED && c->count_modes > 0)
+          c->connection == DRM_MODE_CONNECTED)
         conn = std::move(c);
     }
-    if (!conn) throw std::runtime_error("no connected HDMI display with modes");
+    if (!conn) throw std::runtime_error("no connected HDMI display");
     connector_id_ = conn->connector_id;
     modes_.assign(conn->modes, conn->modes + conn->count_modes);
+    read_edid();
 
     // Prefer the CRTC already driving this connector; otherwise any CRTC the
     // connector's encoders can reach.
@@ -123,27 +104,8 @@ void DrmOutput::destroy_buffer() {
   handle_ = 0;
 }
 
-const drmModeModeInfo& DrmOutput::set_mode(const ModeRequest& req) {
-  const drmModeModeInfo* pick = nullptr;
-  if (req.width)
-    for (const auto& m : modes_)
-      if (m.hdisplay == req.width && m.vdisplay == req.height &&
-          (!req.refresh || refresh_hz(m) == req.refresh) &&
-          !(m.flags & DRM_MODE_FLAG_INTERLACE)) {
-        pick = &m;
-        break;
-      }
-  if (!pick)
-    for (const auto& m : modes_)
-      if (m.type & DRM_MODE_TYPE_PREFERRED) {
-        pick = &m;
-        break;
-      }
-  if (!pick) pick = &modes_.front();
-  if (req.width && (pick->hdisplay != req.width || pick->vdisplay != req.height))
-    std::fprintf(stderr, "requested %dx%d not offered by the display; using %s\n",
-                 req.width, req.height, describe(*pick).c_str());
-  mode_ = *pick;
+void DrmOutput::set_mode(const drmModeModeInfo& mode) {
+  mode_ = mode;
 
   destroy_buffer();
   drm_mode_create_dumb create{};
@@ -172,7 +134,25 @@ const drmModeModeInfo& DrmOutput::set_mode(const ModeRequest& req) {
 
   if (drmModeSetCrtc(fd_, crtc_id_, fb_id_, 0, 0, &connector_id_, 1, &mode_) != 0)
     fail("drmModeSetCrtc " + describe(mode_));
-  return mode_;
+}
+
+void DrmOutput::read_edid() {
+  drmModeObjectProperties* props =
+      drmModeObjectGetProperties(fd_, connector_id_, DRM_MODE_OBJECT_CONNECTOR);
+  if (!props) return;
+  for (uint32_t i = 0; i < props->count_props && edid_.empty(); ++i) {
+    drmModePropertyRes* p = drmModeGetProperty(fd_, props->props[i]);
+    if (p && std::strcmp(p->name, "EDID") == 0 && props->prop_values[i]) {
+      if (drmModePropertyBlobRes* b =
+              drmModeGetPropertyBlob(fd_, static_cast<uint32_t>(props->prop_values[i]))) {
+        const auto* d = static_cast<const uint8_t*>(b->data);
+        edid_.assign(d, d + b->length);
+        drmModeFreePropertyBlob(b);
+      }
+    }
+    drmModeFreeProperty(p);
+  }
+  drmModeFreeObjectProperties(props);
 }
 
 Surface DrmOutput::surface() {
