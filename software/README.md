@@ -57,6 +57,20 @@ echo off    | sudo tee /sys/class/drm/card0-HDMI-A-1/status   # "unplug"
 echo detect | sudo tee /sys/class/drm/card0-HDMI-A-1/status   # back to the real state
 ```
 
+## Install on the board (boot straight into the app)
+
+```sh
+cmake --build build && sudo packaging/install-board.sh && sudo reboot
+```
+
+`install-board.sh` installs the binary and `hdmi-transcode.service`, disables the desktop
+and the tty1 login, and drops `splash`/`console=tty1` from the kernel command line (N4,
+N7). Settings until the web page exists: `/etc/default/hdmi-transcode`, then
+`sudo systemctl restart hdmi-transcode`. Logs: `sudo journalctl -u hdmi-transcode -f`.
+To get the board back to a normal console: `sudo systemctl disable --now
+hdmi-transcode && sudo systemctl unmask getty@tty1`, and restore
+`/etc/kernel/cmdline.pre-hdmi-transcode` + `sudo u-boot-update`.
+
 ## Layout
 
 - `src/drm_output.*`: owns the DRM fd/master, the scanout buffer and the CRTC (R1, R2, N6).
@@ -69,6 +83,7 @@ echo detect | sudo tee /sys/class/drm/card0-HDMI-A-1/status   # back to the real
   EDID (R6, R7, N8).
 - `src/rga_scaler.*`: RGA scale + YUV→RGB into the scanout buffer, black bars (N2).
 - `src/app_main.cpp`: the `hdmi-transcode` event loop.
+- `packaging/`: systemd unit, defaults file, board install script.
 - `src/test_pattern.*`: the generated test pattern (R4), pure drawing into a `Surface`.
 - `src/pattern_main.cpp`: the `hdmi-transcode-pattern` tool.
 - `tests/`: unit tests for the pattern, EDID parsing and mode choice (fixture: the
