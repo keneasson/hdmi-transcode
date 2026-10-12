@@ -102,8 +102,8 @@ lights from the Zero's supply through the cable (2026-10-11).
 | `+5V` cable detect | **always "yes" on the C790, even with nothing plugged in** (board back-powers the HDMI 5V). Can't be used for input presence: use TMDS / stable-sync status instead (R5) | 2026-10-11 |
 | EDID | chip starts with **none**; sources won't transmit until one is loaded (`v4l2-ctl -d <subdev> --set-edid=type=hdmi` worked; volatile, gone on reboot) | 2026-10-11 |
 | `/dev/video*` and `/dev/v4l-subdev*` created | `/dev/media0`; subdevs: rkisp-isp, rkisp-csi, csi2-dphy0, `m00_b_tc35874x 2-000f`; `/dev/video0..` rkisp mainpath/selfpath/rawwr | 2026-10-11 |
-| `--query-dv-timings` result (this answers the ATEM frame rate) | | |
-| GStreamer smoke test showed a picture? | | |
+| `--query-dv-timings` result (this answers the ATEM frame rate) | Mac laptop as source (not yet the ATEM): 1920x1080p **60.00**, 148.5 MHz, VIC 16, YCbCr 4:4:4 BT.709 limited, 8-bit, no HDCP. ATEM rate still to measure | 2026-10-11 |
+| GStreamer smoke test showed a picture? | not run yet. **Raw capture works:** `v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=NV12 --stream-mmap=4 --stream-count=30` (rkisp mainpath) gave 30 × 3 110 400-byte NV12 frames; a frame converted on the Mac showed the source desktop with correct colour. Graph: csi-subdev UYVY8_2X8 1920x1080 → isp → mainpath; formats UYVY/NV16/NV12/NV21 etc. Board A (4 GB) | 2026-10-11 |
 
 ## Gotchas discovered
 
