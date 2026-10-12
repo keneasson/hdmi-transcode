@@ -109,6 +109,27 @@ lights from the Zero's supply through the cable (2026-10-11).
 
 Free-form, newest first. Anything that cost more than ten minutes goes here.
 
+- **2026-10-11, first live picture, then a kernel lock-up on capture restart.**
+  Working preview (board A, rsdk-b1, overlay `radxa-zero3-tc358743`, GDM stopped):
+  `gst-launch-1.0 v4l2src device=/dev/video0 io-mode=dmabuf !
+  video/x-raw,format=NV12,width=1920,height=1080 ! kmssink plane-id=72 sync=false`
+  showed the source on the SyncMaster at ~5 % CPU, visibly low latency, with some
+  flicker (not yet diagnosed). Traps on the way:
+  - `kmssink` defaults to plane 96 **Cluster0-win0, which on RK3566 takes only AFBC**:
+    negotiates `arm-afbc=1` then fails with `unable to copy AFBC`. Use plane 72
+    `Esmart0-win0` (Smart0 = plane 56 carries the console fb). Our code must pick the
+    plane explicitly.
+  - `CIF_ISP_PIC_SIZE_ERROR (0x1)` logs once per stream start; harmless.
+  - **Lock-up:** killing a streaming pipeline and starting another ~1 s later crashed
+    the old process's close path: `BUG: spinlock bad magic ... v4l2_fh_del <-
+    rkisp_fop_release`, its thread spun, `rcu_sched detected stalls` 55 s later, WiFi
+    commands timed out, board unreachable (heartbeat LED kept going). The interrupt
+    table printed with the stall (`17: 0 0 0 0 GICv3 67 Level (null)`) is not the cause.
+    Rules for the app: exactly one owner of the capture node; stop streaming, free
+    buffers and close fully before any re-open; never overlap open/close. Candidate
+    mitigation: route the TC358743 through `rkcif` instead of `rkisp` (needs an overlay
+    variant; device-tree change, ask first).
+
 - **2026-10-11, b6 image hangs ~10 s into boot on both boards.** Board A (eMMC) and
   board B (no eMMC) both stopped right after the journal flush, with the LED going
   out at about the same moment, the HDMI console frozen on a static cursor, and
