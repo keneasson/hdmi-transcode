@@ -1,44 +1,48 @@
 #!/usr/bin/env bash
-# Download and verify the pinned Radxa Zero 3 OS image used for bring-up.
+# Download, verify and decompress the pinned Radxa Zero 3 OS image used for bring-up.
 #
-# The image is NOT stored in this repo (318 MB, Radxa's artifact). This script is
-# the reproducible record of exactly which build we use. Bump the pins together.
+# The image is NOT stored in this repo (1.4 GB, Radxa's artifact). The pins live in
+# scripts/image.env; this script is the reproducible record of exactly which build
+# we use.
 #
 # Usage: scripts/fetch-image.sh [dest-dir]      (default: ~/Downloads/radxa)
+# Result: <dest>/<IMAGE_NAME>.img (the .xz is kept)
 set -euo pipefail
+here="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=image.env
+. "$here/image.env"
 
-# --- pins -------------------------------------------------------------------
-REPO="radxa-build/radxa-zero3"
-RELEASE="b6"                                         # 2024-01-10, Debian Bullseye, Rockchip BSP kernel
-IMAGE="radxa-zero3_debian_bullseye_cli_b6.img"       # CLI = headless, no display server
-# sha512 of the DECOMPRESSED .img, as published in ${IMAGE}.sha512 (verified 2026-10-04)
-SHA512="5fbc0c478785b8928fbe986cd5d004d8bc59bfe373ccacd9112f707a5ff455660114b340ca60e67d4155cb18f18daf3d52beb630c9804c42753003e4ce1932e4"
-# ----------------------------------------------------------------------------
-
-dest="${1:-$HOME/Downloads/radxa}"
+dest="${1:-$IMAGE_DIR}"
 mkdir -p "$dest"
-xz_path="$dest/$IMAGE.xz"
+xz_path="$dest/$IMAGE_ASSET"
+img_path="$dest/$IMAGE_NAME.img"
 
 if [ -f "$xz_path" ]; then
   echo "already present: $xz_path"
 else
-  echo "downloading $IMAGE.xz from $REPO release $RELEASE ..."
+  echo "downloading $IMAGE_ASSET from $IMAGE_REPO release $IMAGE_RELEASE ..."
   if command -v gh >/dev/null 2>&1; then
-    gh release download "$RELEASE" --repo "$REPO" --pattern "$IMAGE.xz" --dir "$dest"
+    gh release download "$IMAGE_RELEASE" --repo "$IMAGE_REPO" --pattern "$IMAGE_ASSET" --dir "$dest"
   else
     curl -fL --progress-bar -o "$xz_path" \
-      "https://github.com/$REPO/releases/download/$RELEASE/$IMAGE.xz"
+      "https://github.com/$IMAGE_REPO/releases/download/$IMAGE_RELEASE/$IMAGE_ASSET"
   fi
 fi
 
-echo "verifying sha512 of the decompressed image (streams ~2.4 GB, takes a minute) ..."
-got="$(xz -dc "$xz_path" | shasum -a 512 | cut -d' ' -f1)"
-if [ "$got" != "$SHA512" ]; then
+echo "verifying sha512 of $IMAGE_ASSET ..."
+got="$(shasum -a 512 "$xz_path" | cut -d' ' -f1)"
+if [ "$got" != "$IMAGE_SHA512" ]; then
   echo "SHA512 MISMATCH for $xz_path" >&2
-  echo "  want $SHA512" >&2
+  echo "  want $IMAGE_SHA512" >&2
   echo "  got  $got" >&2
   echo "Delete the file and re-run; if it persists, the release or the pin changed." >&2
   exit 1
 fi
 echo "SHA512 OK"
-echo "$xz_path"
+
+if [ ! -f "$img_path" ]; then
+  echo "decompressing to $img_path (~8 GB) ..."
+  xz -dc "$xz_path" > "$img_path.partial"
+  mv "$img_path.partial" "$img_path"
+fi
+echo "$img_path"

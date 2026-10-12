@@ -114,6 +114,19 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 - N4. Minimal OS, no display server; the app owns the display via DRM/KMS. Boot straight
   into the app.
 - N5. Licensed BSD-3-Clause (see `LICENSE`).
+- N6. **The output never sleeps, blanks or powers the display down** while the box is
+  on (Ken, 2026-10-11: "we can't have the board sleep while there's video feeding it,
+  that would be a short presentation"). No screensaver, no DPMS off, no console blanking
+  (`consoleblank=0`), no desktop power management (the desktop is removed). With no
+  input the box shows the test pattern (R4), never a dark screen.
+- N7. **Nothing but our picture on the HDMI output.** No kernel or boot text, login
+  prompt or cursor: on 2026-10-11 kernel messages scrolled over the live picture once the
+  display manager was stopped. Quiet kernel console on HDMI (serial only), no getty on
+  tty1, our process owns the display from boot.
+- N8. **Capture is robust to restarts.** One process owns the capture device; streaming
+  is stopped and the device fully closed before it is reopened (input format change,
+  settings change). Observed 2026-10-11: overlapping a close and a re-open of the
+  `rkisp` node crashed the kernel driver and took the board off the network.
 
 ## Open questions
 

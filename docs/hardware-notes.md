@@ -7,11 +7,13 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 
 | Item | Value | Date |
 |---|---|---|
-| `/proc/device-tree/model` | | |
-| Image file name | | |
-| `uname -r` | | |
-| Default user changed | no | |
-| Boot medium (SD / eMMC) | | |
+| `/proc/device-tree/model` | `Radxa ZERO 3`; compatible `radxa,zero3w-aic8800ds2 radxa,zero3 rockchip,rk3566` (both boards) | 2026-10-11 |
+| Image file name | `radxa-zero3_bookworm_kde_b1` (+ `prepare-firstboot.sh`) | 2026-10-11 |
+| `uname -r` | `6.1.84-10-rk2410-nocsf` | 2026-10-11 |
+| Default user changed | no (`radxa`/`radxa`; SSH key installed for `radxa`) | 2026-10-11 |
+| Boot medium (SD / eMMC) | SD (`mmcblk1`). Board A boots the SD card fine even with its factory eMMC system present (different UUIDs, no clash) | 2026-10-11 |
+| WiFi chip | AIC8800DS2 (`aic8800_fdrv`), joined `Easson` via `before.txt` on first boot | 2026-10-11 |
+| Status LED | heartbeat (double flash, pause) when running; **black screen + LED off does not mean hung** on this image | 2026-10-11 |
 
 ## Zero 3W ports (from Radxa docs, https://docs.radxa.com/en/zero/zero3, 2026-10-05)
 
@@ -24,15 +26,24 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 | Display out | micro HDMI, 1080p60 | 2026-10-05 |
 | Radio | Wi-Fi 6 + BT 5.4 (3W) | 2026-10-05 |
 
+## Boards on hand
+
+| Board | RAM / storage | Notes | Date |
+|---|---|---|---|
+| A | 4 GB / 32 GB eMMC | eMMC arrived **with a system already installed** (3 partitions, chip `07S000`, 29.3 GiB); intended production-like board, gets the C790 | 2026-10-11 |
+| B | 2 GB / no eMMC | SD-only; bench board for bring-up and output-side work | 2026-10-11 |
+
 ## Image facts (from inspecting the file, not the board)
 
 | Item | Value | Date |
 |---|---|---|
-| Pinned image | `radxa-zero3_debian_bullseye_cli_b6.img.xz`, release `b6` 2024-01-10 | 2026-10-04 |
-| Decompressed size / sha512 | 2 549 646 336 bytes; hash pinned in `scripts/fetch-image.sh`, verified | 2026-10-04 |
-| Partitions | 1 `config` FAT 16 MB @ 16777216; 2 `boot` FAT 314 MB empty; 3 rootfs ext4 2.2 GB | 2026-10-04 |
-| First-boot mechanism | rsetup `before.txt` in `config`; `headless`-only SSH by default | 2026-10-04 |
-| Default accounts | `radxa`/`radxa`, `rock`/`rock` (sudo) | 2026-10-04 |
+| Pinned image | `radxa-zero3_bookworm_kde_b1`, release `rsdk-b1` 2025-07-15 (pins in `scripts/image.env`) | 2026-10-11 |
+| Size / sha512 | 1 454 086 428 bytes compressed (8 074 662 912 decompressed); sha512 of the `.xz` pinned, verified | 2026-10-11 |
+| Kernel | `6.1.84-10-rk2410-nocsf` (from the image's extlinux.conf / manifest) | 2026-10-11 |
+| Partitions | 1 `config` FAT 16 MB @ 16777216; 2 `boot` FAT 300 MB empty; 3 rootfs ext4 7.2 GB @ 348127232 | 2026-10-11 |
+| First-boot mechanism | rsetup 0.4.16 `before.txt` in `config`; `headless`-only SSH by default (same lines as b6) | 2026-10-11 |
+| Default accounts | `radxa`/`radxa`, `rock`/`rock` (sudo) | 2026-10-11 |
+| Previous pin | `radxa-zero3_debian_bullseye_cli_b6` (2024-01-10, kernel 5.10): **does not boot to userspace on our boards**, see gotchas | 2026-10-11 |
 
 ## Target projector: NEC NP3151W (from spec sheet, not yet measured)
 
@@ -61,6 +72,11 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 
 ## CSI / camera connector (bringup §5d–5e)
 
+Connector is on the board's **underside** (same side as the eMMC). Cable seated with
+pin-1 marks (triangle on both PCBs, "1" on both cable ends) aligned; C790 green LED
+lights from the Zero's supply through the cable (2026-10-11).
+
+
 | Item | Value | Date |
 |---|---|---|
 | Camera connector pin count | 22-pin 0.5 mm, confirmed by eye: `CSI` FPC on the short edge at the HDMI end, contacts toward the board | 2026-10-05 |
@@ -80,14 +96,60 @@ a spec-sheet claim; if a line is empty, we don't know yet. Date each entry.
 
 | Item | Value | Date |
 |---|---|---|
-| TC358743 seen on I2C bus / address | | |
-| `/dev/video*` and `/dev/v4l-subdev*` created | | |
-| `--query-dv-timings` result (this answers the ATEM frame rate) | | |
-| GStreamer smoke test showed a picture? | | |
+| Kernel driver | Rockchip `tc35874x` built in (`CONFIG_VIDEO_TC35874X=y`); upstream `CONFIG_VIDEO_TC358743` not set. Also built in: `rkcif`, `rkisp`, `csi2-dphy`, RGA | 2026-10-11 |
+| Overlay | `radxa-zero3-tc358743` (in `/boot/dtbo`, shipped disabled): I2C2 @ `0x0f`, **4 data lanes**, routed csi2-dphy0 → **rkisp** (not rkcif). Enabled by renaming `.dtbo.disabled` → `.dtbo` + `u-boot-update`; backup `extlinux.conf.pre-tc358743` | 2026-10-11 |
+| TC358743 seen on I2C bus / address | yes: `2-000f`, "tc358743 found", `Lanes in use: 4`, CSI out `YCbCr 422 16-bit`. Without the C790 attached the driver still binds and logs `i2c_rd ... failed` (boot is unaffected) | 2026-10-11 |
+| `+5V` cable detect | **always "yes" on the C790, even with nothing plugged in** (board back-powers the HDMI 5V). Can't be used for input presence: use TMDS / stable-sync status instead (R5) | 2026-10-11 |
+| EDID | chip starts with **none**; sources won't transmit until one is loaded (`v4l2-ctl -d <subdev> --set-edid=type=hdmi` worked; volatile, gone on reboot) | 2026-10-11 |
+| `/dev/video*` and `/dev/v4l-subdev*` created | `/dev/media0`; subdevs: rkisp-isp, rkisp-csi, csi2-dphy0, `m00_b_tc35874x 2-000f`; `/dev/video0..` rkisp mainpath/selfpath/rawwr | 2026-10-11 |
+| `--query-dv-timings` result (this answers the ATEM frame rate) | Mac laptop as source (not yet the ATEM): 1920x1080p **60.00**, 148.5 MHz, VIC 16, YCbCr 4:4:4 BT.709 limited, 8-bit, no HDCP. ATEM rate still to measure | 2026-10-11 |
+| GStreamer smoke test showed a picture? | not run yet. **Raw capture works:** `v4l2-ctl -d /dev/video0 --set-fmt-video=width=1920,height=1080,pixelformat=NV12 --stream-mmap=4 --stream-count=30` (rkisp mainpath) gave 30 × 3 110 400-byte NV12 frames; a frame converted on the Mac showed the source desktop with correct colour. Graph: csi-subdev UYVY8_2X8 1920x1080 → isp → mainpath; formats UYVY/NV16/NV12/NV21 etc. Board A (4 GB) | 2026-10-11 |
 
 ## Gotchas discovered
 
 Free-form, newest first. Anything that cost more than ten minutes goes here.
+
+- **2026-10-11, first live picture, then a kernel lock-up on capture restart.**
+  Working preview (board A, rsdk-b1, overlay `radxa-zero3-tc358743`, GDM stopped):
+  `gst-launch-1.0 v4l2src device=/dev/video0 io-mode=dmabuf !
+  video/x-raw,format=NV12,width=1920,height=1080 ! kmssink plane-id=72 sync=false`
+  showed the source on the SyncMaster at ~5 % CPU, visibly low latency, with some
+  flicker (not yet diagnosed). Traps on the way:
+  - `kmssink` defaults to plane 96 **Cluster0-win0, which on RK3566 takes only AFBC**:
+    negotiates `arm-afbc=1` then fails with `unable to copy AFBC`. Use plane 72
+    `Esmart0-win0` (Smart0 = plane 56 carries the console fb). Our code must pick the
+    plane explicitly.
+  - `CIF_ISP_PIC_SIZE_ERROR (0x1)` logs once per stream start; harmless.
+  - **Lock-up:** killing a streaming pipeline and starting another ~1 s later crashed
+    the old process's close path: `BUG: spinlock bad magic ... v4l2_fh_del <-
+    rkisp_fop_release`, its thread spun, `rcu_sched detected stalls` 55 s later, WiFi
+    commands timed out, board unreachable (heartbeat LED kept going). The interrupt
+    table printed with the stall (`17: 0 0 0 0 GICv3 67 Level (null)`) is not the cause.
+    Rules for the app: exactly one owner of the capture node; stop streaming, free
+    buffers and close fully before any re-open; never overlap open/close. Candidate
+    mitigation: route the TC358743 through `rkcif` instead of `rkisp` (needs an overlay
+    variant; device-tree change, ask first).
+
+- **2026-10-11, b6 image hangs ~10 s into boot on both boards.** Board A (eMMC) and
+  board B (no eMMC) both stopped right after the journal flush, with the LED going
+  out at about the same moment, the HDMI console frozen on a static cursor, and
+  `before.txt` never consumed (rsetup.service never ran). Read with
+  `scripts/card-diag.sh`. Cause, **likely but unconfirmed on the board**: Radxa
+  changed the 3W's WiFi module after launch, and images from before the change don't
+  support it ([forum](https://forum.radxa.com/t/radxa-zero-3w-wifi-problem/25430)).
+  The log stops where the kernel powers the SDIO WiFi. Switched to `rsdk-b1`.
+  Lesson: pin the newest vendor image, not one from memory.
+- **2026-10-11, reading ext4 off a power-cut card shows a stale filesystem.**
+  `debugfs` reads blocks without replaying the ext4 journal, so changes committed
+  only to the journal before the power cut are invisible until Linux next mounts the
+  card. That made a board-A boot look like it came from board B. Treat card-diag's
+  rootfs view as "as of the last checkpoint". The `config` partition is FAT (no
+  journal) and is reliable.
+- **2026-10-11, board A's eMMC has its own system.** Its partitions may carry the
+  same UUIDs as an SD image of the same build, and `/config` is mounted by UUID, so an
+  SD boot on board A could end up reading the eMMC's `/config`. Not the cause of the
+  hang above (board B has no eMMC and hung the same way), but plan to flash board A's
+  eMMC directly (Maskrom + `rkdeveloptool`, bringup §7) rather than boot it from SD.
 
 - **2026-10-05, first boot attempt #1: stalled with no WiFi.** Screen froze after
   `GROWROOT: CHANGED: partition=3 ... size=124055519` (the resize itself worked:

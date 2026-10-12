@@ -8,7 +8,8 @@
 # The WiFi password ends up in plain text inside that copy, so treat the copy as a
 # secret: it stays in ~/Downloads/radxa and is never committed (.gitignore covers it).
 #
-# Facts this relies on (verified against the b6 image on 2026-10-04):
+# Facts this relies on (verified against b6 on 2026-10-04 and rsdk-b1 / rsetup 0.4.16
+# on 2026-10-11; same partition offsets and the same before.txt lines):
 #   - GPT partition 1 is a 16 MB FAT volume labelled "config" at byte offset 16777216
 #   - it holds before.txt with the lines
 #       #connect_wi-fi private_network password
@@ -37,13 +38,12 @@ if [ "${1:-}" = "--open" ]; then open_network=1; shift; fi
 
 die() { echo "error: $*" >&2; exit 1; }
 command -v mcopy >/dev/null 2>&1 || die "mtools not found: brew install mtools"
+here="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=image.env
+. "$here/image.env"
 
-src="${1:-$HOME/Downloads/radxa/radxa-zero3_debian_bullseye_cli_b6.img}"
-if [ ! -f "$src" ]; then
-  [ -f "$src.xz" ] || die "image not found: $src (run scripts/fetch-image.sh)"
-  echo "decompressing $src.xz (keeps the .xz) ..."
-  xz -dk "$src.xz"
-fi
+src="${1:-$IMAGE_DIR/$IMAGE_NAME.img}"
+[ -f "$src" ] || die "image not found: $src (run scripts/fetch-image.sh)"
 out="${src%.img}-firstboot.img"
 
 CONFIG_OFFSET=16777216
@@ -73,7 +73,7 @@ echo "copying image to $out ..."
 cp "$src" "$out"
 
 mdir -i "$vol" ::before.txt >/dev/null 2>&1 \
-  || die "no before.txt in a FAT volume at offset $CONFIG_OFFSET; is this the b6 image?"
+  || die "no before.txt in a FAT volume at offset $CONFIG_OFFSET; is this the pinned image (scripts/image.env)?"
 
 tmp="$(mktemp -d)"
 mcopy -i "$vol" ::before.txt "$tmp/before.txt"

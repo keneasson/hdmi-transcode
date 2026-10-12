@@ -31,22 +31,30 @@ step needs it:
 | `gh` | download pinned release assets, PRs | `brew install gh` |
 | `xz` | decompress the image | ships with macOS |
 | `mtools` | edit the image's FAT `config` partition; macOS cannot mount it | `brew install mtools` |
+| `e2fsprogs` | `debugfs` reads the card's ext4 rootfs (logs) for `scripts/card-diag.sh`; keg-only, used from `/opt/homebrew/opt/e2fsprogs/sbin` | `brew install e2fsprogs` |
 
 ## 1. Image choice
 
-Use Radxa's **official headless/CLI image** for the Zero 3W (Debian-based, Rockchip
-BSP kernel). Not the desktop variant: a display server would own the HDMI output we
-need to drive ourselves.
+Use Radxa's **official image** for the Zero 3W (Debian, Rockchip BSP kernel), always
+the **newest release**: these boards change hardware after launch and older images
+do not follow. Check https://docs.radxa.com/en/zero/zero3/download and
+https://github.com/radxa-build/radxa-zero3/releases before re-pinning.
 
-**Pinned build:** `radxa-zero3_debian_bullseye_cli_b6.img.xz` from release `b6`
-(2024-01-10) of https://github.com/radxa-build/radxa-zero3/releases. It is the newest
-release that ships a CLI variant; the later `rsdk-*` releases are KDE desktop builds
-(fallback if `b6` lacks the `tc358743` driver: `rsdk-b1`, Bookworm, and disable its
-display manager). The pin and the published sha512 live in `scripts/fetch-image.sh`;
-change them together.
+**Pinned build:** `radxa-zero3_bookworm_kde_b1` from release `rsdk-b1` (2025-07-15):
+Debian Bookworm, kernel `6.1.84-10-rk2410-nocsf`, `aic8800` WiFi driver, Rockchip
+camera/V4L2/GStreamer/MPP packages. It is the newest release and ships only as a KDE
+desktop build: the desktop stays on for the first boot (a login screen on the display
+proves the boot completed) and is then disabled so nothing but our process drives HDMI.
+The pins live in `scripts/image.env`; `fetch-image.sh`, `prepare-firstboot.sh` and
+`flash-sd.sh` all read it.
+
+**Not `b6`** (2024-01-10, Bullseye, kernel 5.10, the last CLI build): on our 2026
+`V1.12` boards it hung about 10 s into boot on both boards, before first-boot setup
+ran. Radxa replaced the 3W's WiFi module after launch and images from before the
+change don't support it (see `hardware-notes.md`, 2026-10-11).
 
 ```sh
-scripts/fetch-image.sh            # downloads to ~/Downloads/radxa and verifies sha512
+scripts/fetch-image.sh            # downloads to ~/Downloads/radxa, verifies sha512, decompresses
 ```
 
 Docs for the board: https://docs.radxa.com/en/zero/zero3. Record the exact image and
@@ -54,11 +62,12 @@ kernel version in `hardware-notes.md` once booted.
 
 ## 2. Prepare first boot: WiFi + SSH with no keyboard (do this BEFORE §3)
 
-Facts found by inspecting the b6 image (2026-10-04), not from docs:
+Facts found by inspecting the images (b6 2026-10-04, rsdk-b1 2026-10-11), not from docs.
+Both have the same layout and the same `before.txt` lines:
 
 - GPT layout: partition 1 `config` (16 MB FAT, byte offset 16777216), partition 2
   `boot` (314 MB FAT, **empty**; U-Boot loads the kernel from the rootfs), partition 3
-  rootfs (ext4, 2.2 GB, grows to fill the card on first boot via `resize_root`).
+  rootfs (ext4, 7.2 GB in rsdk-b1, grows to fill the card on first boot via `resize_root`).
 - `config` holds `before.txt` and `config.txt`, run by Radxa's `rsetup` first-boot
   service and then deleted. Commands available include `add_user`, `connect_wi-fi
   <ssid> [password]`, `enable_service`/`disable_service`, `update_locale`.
@@ -82,7 +91,7 @@ sets `connect_wi-fi`, and replaces the conditional with an unconditional
 `enable_service ssh`. A failed run removes the partial copy.
 
 ```sh
-scripts/prepare-firstboot.sh        # -> ~/Downloads/radxa/..._b6-firstboot.img
+scripts/prepare-firstboot.sh        # -> ~/Downloads/radxa/radxa-zero3_bookworm_kde_b1-firstboot.img
 ```
 
 The `-firstboot.img` copy contains the WiFi password in plain text. It lives in
