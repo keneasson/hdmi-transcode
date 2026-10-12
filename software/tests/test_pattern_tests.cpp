@@ -1,22 +1,11 @@
-// Tests for the generated test pattern and mode parsing. No display needed:
+// Tests for the generated test pattern. No display needed:
 // everything draws into a heap buffer.
-#include <cstdio>
 #include <vector>
 
-#include "drm_output.h"
+#include "check.h"
 #include "test_pattern.h"
 
 namespace {
-
-int failures = 0;
-
-#define CHECK(cond)                                                    \
-  do {                                                                 \
-    if (!(cond)) {                                                     \
-      std::fprintf(stderr, "%s:%d: CHECK(%s) failed\n", __FILE__, __LINE__, #cond); \
-      ++failures;                                                      \
-    }                                                                  \
-  } while (0)
 
 struct Buffer {
   std::vector<uint32_t> px;
@@ -65,17 +54,6 @@ void text_metrics() {
   CHECK(b.s.at(0, 0) == 0);
 }
 
-void parse_mode_cases() {
-  auto a = ht::parse_mode("1280x800@60");
-  CHECK(a && a->width == 1280 && a->height == 800 && a->refresh == 60);
-  auto b = ht::parse_mode("1024x768");
-  CHECK(b && b->width == 1024 && b->height == 768 && b->refresh == 0);
-  CHECK(!ht::parse_mode("1024"));
-  CHECK(!ht::parse_mode("1024x768@60x"));
-  CHECK(!ht::parse_mode("0x768"));
-  CHECK(!ht::parse_mode("garbage"));
-}
-
 }  // namespace
 
 int main() {
@@ -83,11 +61,5 @@ int main() {
   stride_padding_is_never_written();
   fill_rect_clips();
   text_metrics();
-  parse_mode_cases();
-  if (failures) {
-    std::fprintf(stderr, "%d check(s) failed\n", failures);
-    return 1;
-  }
-  std::puts("all tests passed");
-  return 0;
+  return finish();
 }

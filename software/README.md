@@ -27,9 +27,9 @@ The program needs to be DRM master, so nothing else may own the display (the ima
 desktop is disabled: `systemctl disable --now gdm`, default target `multi-user`).
 
 ```sh
-build/hdmi-transcode-pattern --list                 # modes the display offers
+build/hdmi-transcode-pattern --list                 # EDID, offered modes, automatic choice
 sudo build/hdmi-transcode-pattern --mode 1280x800@60  # until Ctrl-C / SIGTERM
-sudo build/hdmi-transcode-pattern --seconds 60        # preferred mode, 60 s
+sudo build/hdmi-transcode-pattern --seconds 60        # automatic choice (R2/R2a), 60 s
 ```
 
 On exit the previous screen contents are restored.
@@ -37,6 +37,10 @@ On exit the previous screen contents are restored.
 ## Layout
 
 - `src/drm_output.*`: owns the DRM fd/master, the scanout buffer and the CRTC (R1, R2, N6).
+- `src/edid.*`: reads the display's own preferred timing from its EDID.
+- `src/mode_select.*`: the mode choice (R2, R2a): request → EDID preferred → fallback
+  ladder 1280x800 / 1024x768 / 640x480 @60 → anything progressive → built-in 1280x800.
 - `src/test_pattern.*`: the generated test pattern (R4), pure drawing into a `Surface`.
 - `src/pattern_main.cpp`: the `hdmi-transcode-pattern` tool.
-- `tests/`: unit tests for the pattern and mode parsing (run anywhere libdrm headers exist).
+- `tests/`: unit tests for the pattern, EDID parsing and mode choice (fixture: the
+  SyncMaster 2433's EDID, serial scrubbed). Run anywhere libdrm headers exist.

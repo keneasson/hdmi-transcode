@@ -12,9 +12,11 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(DRM REQUIRED IMPORTED_TARGET libdrm)
 
-# Output side: DRM/KMS display + generated test pattern (requirements R1, R2, R4, N6).
+# Output side: DRM/KMS display, mode choice + generated test pattern (R1, R2, R2a, R4, N6).
 add_library(output STATIC
   src/drm_output.cpp
+  src/edid.cpp
+  src/mode_select.cpp
   src/test_pattern.cpp
 )
 target_include_directories(output PUBLIC src)
@@ -27,3 +29,7 @@ enable_testing()
 add_executable(test_pattern_tests tests/test_pattern_tests.cpp)
 target_link_libraries(test_pattern_tests PRIVATE output)
 add_test(NAME test_pattern COMMAND test_pattern_tests)
+
+add_executable(mode_select_tests tests/mode_select_tests.cpp)
+target_link_libraries(mode_select_tests PRIVATE output)
+add_test(NAME mode_select COMMAND mode_select_tests)
