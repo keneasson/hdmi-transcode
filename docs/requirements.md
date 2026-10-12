@@ -15,6 +15,14 @@ This project is a small box that sits on the *projector* leg of the splitter, ac
 whatever the mixer locked the chain to (1080p), and re-outputs it in a form the attached
 display accepts, with the aspect handling selectable by the user.
 
+**Market scope (Ken, 2026-10-11).** Primary: the venue case above (church, projector,
+ATEM). Secondary: a general product for **any HDMI split where the sinks are mutually
+incompatible**: one leg of a splitter feeding a display that can't take what the other
+sinks negotiated. So the box must not assume this venue: no hard-coded source format,
+display, or aspect, and it must cope with whatever display it is plugged into (any EDID,
+HDMI or DVI, old or new). Consequences recorded below as open questions (audio on HDMI
+sinks, inputs above 1080p60, HDCP).
+
 ## Design principle
 
 **Accept whatever arrives; output something stable.** The box is the least demanding
@@ -137,7 +145,23 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
   1920×1080@60 at all. 1024×768@60 stays as the generic 4:3 secondary target. The
   SyncMaster 2433 is the bench display.
 - ATEM Mini frame rate in use (59.94 vs 50) — read from the bridge once connected.
-- Zero 3W CSI lane count (decides 1080p60 vs 1080p30 capture).
+  (A Mac laptop source measured 1080p 60.00 on 2026-10-11; the ATEM is still to measure.)
+- ~~Zero 3W CSI lane count~~ **Answered 2026-10-11:** 4 lanes in use; 1080p60 captured.
+- **General-market scope (from 2026-10-11):**
+  - Audio. DVI sinks have none (N3), but an HDMI TV or display on the split leg would
+    expect it. The C790 carries I2S audio and Radxa ships a `tc358743-audio` overlay;
+    in scope for the general product or not?
+  - Inputs above 1080p60. The TC358743 tops out at 1080p60 (165 MHz); a 4K source must
+    be told (via our EDID) that 1080p is the best this leg takes. Fine for the splitter
+    case, since the splitter handles the 4K sink; confirm that is acceptable.
+  - HDCP. Protected sources (streaming apps, Blu-ray) won't send to the TC358743; the
+    box shows the test pattern / a "protected content" notice instead. Never in scope
+    to strip HDCP.
+  - Bench display: the SyncMaster 2433 is a **1920x1200 (16:10) panel** (EDID DTD1
+    1920x1200@59.95, 154 MHz, 518x324 mm, made 2009), the same aspect as the NP3151W,
+    so it is a faithful stand-in at 1280x800. The board's kernel does not mark that mode
+    preferred (it flags 1080p50 from the CTA block instead): R2 must choose from the
+    EDID itself, not the kernel's preferred flag.
 - Production Buildroot image details (decided: Radxa headless image for bring-up,
   Buildroot on the Rockchip BSP kernel for production; see CLAUDE.md).
 - USB configuration mechanism (R10).
