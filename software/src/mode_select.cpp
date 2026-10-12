@@ -52,6 +52,14 @@ int refresh_mhz(const drmModeModeInfo& m) {
   return static_cast<int>(m.clock * 1e6 / (double(m.htotal) * m.vtotal) + 0.5);
 }
 
+bool same_timing(const drmModeModeInfo& a, const drmModeModeInfo& b) {
+  return a.clock == b.clock && a.hdisplay == b.hdisplay && a.hsync_start == b.hsync_start &&
+         a.hsync_end == b.hsync_end && a.htotal == b.htotal && a.hskew == b.hskew &&
+         a.vdisplay == b.vdisplay && a.vsync_start == b.vsync_start &&
+         a.vsync_end == b.vsync_end && a.vtotal == b.vtotal && a.vscan == b.vscan &&
+         a.flags == b.flags;
+}
+
 std::string describe(const drmModeModeInfo& m) {
   const int mhz = refresh_mhz(m);
   char hz[16];

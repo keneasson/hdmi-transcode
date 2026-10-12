@@ -19,15 +19,21 @@ namespace ht {
 
 class DrmOutput {
  public:
-  // Opens the DRM card and its connected HDMI-A connector (a display with no or a broken
-  // EDID may offer no modes; that is allowed, see choose_mode()). Throws
-  // std::runtime_error with a reason on failure (no display, not master, ...).
+  // Opens the DRM card, becomes master and takes its HDMI-A connector, with or without a
+  // display attached (R2b). Throws std::runtime_error with a reason on failure (no such
+  // card or connector, not master, ...).
   explicit DrmOutput(const std::string& device = "/dev/dri/card0");
   ~DrmOutput();
   DrmOutput(const DrmOutput&) = delete;
   DrmOutput& operator=(const DrmOutput&) = delete;
 
-  // Modes the display offers, in connector order. May be empty.
+  // Re-detects the display (call on a hotplug event); refreshes modes() and edid().
+  // Returns connected().
+  bool probe();
+  bool connected() const { return connected_; }
+
+  // Modes the display offers, in connector order. Empty when disconnected, and possibly
+  // when connected (no or broken EDID).
   const std::vector<drmModeModeInfo>& modes() const { return modes_; }
 
   // The connector's raw EDID blob; empty if the display provided none.
@@ -36,6 +42,11 @@ class DrmOutput {
   // Allocates a scanout buffer for `mode` and programs the CRTC. The mode need not be in
   // modes() (built-in fallback timings for displays without a usable EDID).
   void set_mode(const drmModeModeInfo& mode);
+
+  // Turns the CRTC off and frees the scanout buffer (the display went away).
+  void blank();
+  bool active() const { return fb_id_ != 0; }
+  const drmModeModeInfo& mode() const { return mode_; }
 
   // CPU view of the scanout buffer; valid after set_mode().
   Surface surface();
@@ -46,9 +57,11 @@ class DrmOutput {
  private:
   void destroy_buffer();
   void read_edid();
+  void take_connector_state(drmModeConnector* c);
 
   int fd_ = -1;
   uint32_t connector_id_ = 0;
+  bool connected_ = false;
   uint32_t crtc_id_ = 0;
   std::vector<drmModeModeInfo> modes_;
   std::vector<uint8_t> edid_;

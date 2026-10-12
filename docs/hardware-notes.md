@@ -109,6 +109,15 @@ lights from the Zero's supply through the cable (2026-10-11).
 
 Free-form, newest first. Anything that cost more than ten minutes goes here.
 
+- **2026-10-11, hot-plug can be tested from SSH.** Writing `off` / `on` / `detect` to
+  `/sys/class/drm/card0-HDMI-A-1/status` (root) emits the same udev event as a cable
+  change (`ACTION=change`, `HOTPLUG=1` on `card0`); `detect` returns to real detection.
+  Verified with `hdmi-transcode-pattern`: off → CRTC inactive; detect → re-driven at the
+  EDID mode; a repeat event with the same display → no re-mode-set; started with the
+  display "off" → waits, then lights up. Still to confirm with a real cable pull.
+  Also: `pkill -f <pattern>` over SSH kills the SSH shell itself (its command line
+  contains the pattern); kill by saved PID.
+
 - **2026-10-11, first output from our own code; board A system changes.**
   `hdmi-transcode-pattern --mode 1280x800@60` showed the R4 pattern on the SyncMaster
   exactly as designed. Changes made on board A to get there (record for the Buildroot

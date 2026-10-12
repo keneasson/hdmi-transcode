@@ -11,16 +11,18 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(DRM REQUIRED IMPORTED_TARGET libdrm)
+pkg_check_modules(UDEV REQUIRED IMPORTED_TARGET libudev)
 
-# Output side: DRM/KMS display, mode choice + generated test pattern (R1, R2, R2a, R4, N6).
+# Output side: DRM/KMS display, mode choice, hot-plug + test pattern (R1, R2, R2a, R2b, R4, N6).
 add_library(output STATIC
   src/drm_output.cpp
   src/edid.cpp
+  src/hotplug.cpp
   src/mode_select.cpp
   src/test_pattern.cpp
 )
 target_include_directories(output PUBLIC src)
-target_link_libraries(output PUBLIC PkgConfig::DRM)
+target_link_libraries(output PUBLIC PkgConfig::DRM PkgConfig::UDEV)
 
 add_executable(hdmi-transcode-pattern src/pattern_main.cpp)
 target_link_libraries(hdmi-transcode-pattern PRIVATE output)

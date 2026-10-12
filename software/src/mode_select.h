@@ -42,6 +42,10 @@ ModeChoice choose_mode(const std::vector<drmModeModeInfo>& offered,
 // Built-in VESA timings for the fallback ladder, in ladder order.
 const std::vector<drmModeModeInfo>& fallback_modes();
 
+// True if both describe the same signal on the wire (size, clock, porches, sync, flags),
+// i.e. switching between them would not need a new mode-set.
+bool same_timing(const drmModeModeInfo& a, const drmModeModeInfo& b);
+
 // Refresh in millihertz computed from the timing (vrefresh is rounded to whole Hz).
 int refresh_mhz(const drmModeModeInfo& m);
 std::string describe(const drmModeModeInfo& m);
