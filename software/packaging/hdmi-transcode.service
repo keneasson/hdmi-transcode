@@ -1,0 +1,18 @@
+# Boot straight into the app (N4); nothing else on the HDMI output (N7).
+[Unit]
+Description=hdmi-transcode: HDMI capture -> scale -> HDMI out
+Documentation=https://github.com/keneasson/hdmi-transcode
+After=systemd-udevd.service plymouth-quit-wait.service
+# tty1 would otherwise put a login prompt on the HDMI output.
+Conflicts=getty@tty1.service
+
+[Service]
+EnvironmentFile=-/etc/default/hdmi-transcode
+ExecStart=/usr/local/bin/hdmi-transcode $HT_ARGS
+# systemd only restarts after the old process has exited and released every device,
+# so a restart can never overlap a close of the capture node (N8).
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

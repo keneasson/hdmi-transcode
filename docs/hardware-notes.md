@@ -109,6 +109,15 @@ lights from the Zero's supply through the cable (2026-10-11).
 
 Free-form, newest first. Anything that cost more than ten minutes goes here.
 
+- **2026-10-12, board A boots straight into hdmi-transcode** (`packaging/install-board.sh`).
+  Kernel cmdline now has no `splash` (Plymouth is installed and would hold the display)
+  and no `console=tty1`; `vt.global_cursor_default=0`; getty@tty1 masked; desktop off.
+  Timeline from power-on (journal, monotonic): service started 22.9 s, test pattern
+  23.4 s, live input 25.0 s (two source-change events while the source re-reads our
+  EDID), steady 60.0 fps in/out from then. Boot is 15.7 s kernel + 13.7 s userspace;
+  the longest unit is NetworkManager-wait-online (5.2 s), which our service does not
+  wait for. Trimming boot time is a Buildroot-image task.
+
 - **2026-10-11, our own capture → RGA → display pipeline works** (board A, Mac at 1080p60
   as source, `hdmi-transcode --mode 1280x800@60`): steady **60.0 fps in, 60.0 fps shown,
   RGA 4.6 ms avg / 5.1 ms max per frame**, ~5 % CPU. Snapshots of the shown frame
