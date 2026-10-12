@@ -1,4 +1,5 @@
 // Tests for EDID parsing and the R2/R2a mode choice. No display needed.
+#include <cstdio>
 #include <optional>
 #include <vector>
 
@@ -126,6 +127,21 @@ void describe_formats_fractional_rates() {
   CHECK(ht::describe(mode(1920, 1080, 148500, 2200, 1125)) == "1920x1080 @ 60Hz");
 }
 
+void same_timing_cases() {
+  const auto a = mode(1920, 1200, 154000, 2080, 1235);
+  auto b = a;
+  CHECK(ht::same_timing(a, b));
+  b.type = DRM_MODE_TYPE_USERDEF;  // type/name are bookkeeping, not signal
+  std::snprintf(b.name, sizeof b.name, "other");
+  CHECK(ht::same_timing(a, b));
+  b = a;
+  b.clock = 148500;
+  CHECK(!ht::same_timing(a, b));
+  b = a;
+  b.flags |= DRM_MODE_FLAG_NVSYNC;
+  CHECK(!ht::same_timing(a, b));
+}
+
 void parse_mode_cases() {
   auto a = ht::parse_mode("1280x800@60");
   CHECK(a && a->width == 1280 && a->height == 800 && a->refresh == 60);
@@ -152,6 +168,7 @@ int main() {
   no_modes_at_all_gives_builtin_1280x800();
   fallback_timings_are_60hz();
   describe_formats_fractional_rates();
+  same_timing_cases();
   parse_mode_cases();
   return finish();
 }

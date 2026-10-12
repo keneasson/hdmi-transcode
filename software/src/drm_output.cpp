@@ -41,17 +41,16 @@ DrmOutput::DrmOutput(const std::string& device) {
     ResPtr res(drmModeGetResources(fd_));
     if (!res) fail("drmModeGetResources");
 
+    // The board has one HDMI-A connector. Take it whether or not a display is attached
+    // yet: displays come and go (R2b), probe() tracks that.
     ConnPtr conn;
     for (int i = 0; i < res->count_connectors && !conn; ++i) {
       ConnPtr c(drmModeGetConnector(fd_, res->connectors[i]));
-      if (c && c->connector_type == DRM_MODE_CONNECTOR_HDMIA &&
-          c->connection == DRM_MODE_CONNECTED)
-        conn = std::move(c);
+      if (c && c->connector_type == DRM_MODE_CONNECTOR_HDMIA) conn = std::move(c);
     }
-    if (!conn) throw std::runtime_error("no connected HDMI display");
+    if (!conn) throw std::runtime_error("no HDMI connector on " + device);
     connector_id_ = conn->connector_id;
-    modes_.assign(conn->modes, conn->modes + conn->count_modes);
-    read_edid();
+    take_connector_state(conn.get());
 
     // Prefer the CRTC already driving this connector; otherwise any CRTC the
     // connector's encoders can reach.
@@ -89,6 +88,30 @@ DrmOutput::~DrmOutput() {
     drmDropMaster(fd_);
     ::close(fd_);
   }
+}
+
+void DrmOutput::take_connector_state(drmModeConnector* c) {
+  connected_ = c->connection == DRM_MODE_CONNECTED;
+  modes_.clear();
+  edid_.clear();
+  if (!connected_) return;
+  modes_.assign(c->modes, c->modes + c->count_modes);
+  read_edid();
+}
+
+bool DrmOutput::probe() {
+  // drmModeGetConnector (not ...Current) re-runs detection and re-reads the EDID.
+  ConnPtr c(drmModeGetConnector(fd_, connector_id_));
+  if (!c) fail("drmModeGetConnector");
+  take_connector_state(c.get());
+  return connected_;
+}
+
+void DrmOutput::blank() {
+  if (!fb_id_) return;
+  // Detach the CRTC before freeing the framebuffer it scans out.
+  drmModeSetCrtc(fd_, crtc_id_, 0, 0, 0, nullptr, 0, nullptr);
+  destroy_buffer();
 }
 
 void DrmOutput::destroy_buffer() {
