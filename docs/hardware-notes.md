@@ -109,6 +109,16 @@ lights from the Zero's supply through the cable (2026-10-11).
 
 Free-form, newest first. Anything that cost more than ten minutes goes here.
 
+- **2026-10-11, first output from our own code; board A system changes.**
+  `hdmi-transcode-pattern --mode 1280x800@60` showed the R4 pattern on the SyncMaster
+  exactly as designed. Changes made on board A to get there (record for the Buildroot
+  image): desktop disabled (`systemctl disable --now gdm`, default target
+  `multi-user.target`); installed `build-essential cmake pkg-config` and, from
+  bookworm-backports, `libdrm-dev libdrm-tests`, which moved `libdrm2` from the image's
+  `2.4.122+git…oibaf` build to Debian's `2.4.123-1~bpo12+1`. The SyncMaster 2433's mode
+  list puts **1920x1080 @ 50Hz** first as "preferred" (it lists 1920x1200@60 too):
+  don't trust the preferred flag blindly when picking a default (R2/R2a).
+
 - **2026-10-11, first live picture, then a kernel lock-up on capture restart.**
   Working preview (board A, rsdk-b1, overlay `radxa-zero3-tc358743`, GDM stopped):
   `gst-launch-1.0 v4l2src device=/dev/video0 io-mode=dmabuf !
