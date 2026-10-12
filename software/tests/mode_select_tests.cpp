@@ -126,6 +126,8 @@ void fallback_timings_are_60hz() {
 void describe_formats_fractional_rates() {
   CHECK(ht::describe(mode(1920, 1200, 154000, 2080, 1235)) == "1920x1200 @ 59.95Hz");
   CHECK(ht::describe(mode(1920, 1080, 148500, 2200, 1125)) == "1920x1080 @ 60Hz");
+  CHECK(ht::describe(mode(1024, 768, 65000, 1344, 806)) == "1024x768 @ 60Hz");  // 60.004
+  CHECK(ht::describe(mode(1280, 800, 71000, 1440, 823)) == "1280x800 @ 59.91Hz");
 }
 
 void same_timing_cases() {

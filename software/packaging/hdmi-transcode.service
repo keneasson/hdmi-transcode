@@ -8,6 +8,8 @@ Conflicts=getty@tty1.service
 
 [Service]
 EnvironmentFile=-/etc/default/hdmi-transcode
+# Settings (R5) live in /var/lib/hdmi-transcode/settings, changed from the web page.
+StateDirectory=hdmi-transcode
 ExecStart=/usr/local/bin/hdmi-transcode $HT_ARGS
 # systemd only restarts after the old process has exited and released every device,
 # so a restart can never overlap a close of the capture node (N8).

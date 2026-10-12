@@ -18,7 +18,12 @@ build="$here/../build"
 
 install -m 0755 "$build/hdmi-transcode" /usr/local/bin/hdmi-transcode
 install -m 0644 "$here/hdmi-transcode.service" /etc/systemd/system/hdmi-transcode.service
-[ -f /etc/default/hdmi-transcode ] || install -m 0644 "$here/hdmi-transcode.default" /etc/default/hdmi-transcode
+# Keep a locally edited defaults file, but replace the one the first release shipped:
+# its HT_ARGS="--aspect compress" would override the saved settings at every boot.
+if [ ! -f /etc/default/hdmi-transcode ] ||
+   grep -qx 'HT_ARGS="--aspect compress"' /etc/default/hdmi-transcode; then
+  install -m 0644 "$here/hdmi-transcode.default" /etc/default/hdmi-transcode
+fi
 
 systemctl disable --now gdm 2>/dev/null || true
 systemctl set-default multi-user.target

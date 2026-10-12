@@ -26,10 +26,12 @@ add_library(output STATIC
 target_include_directories(output PUBLIC src)
 target_link_libraries(output PUBLIC PkgConfig::DRM PkgConfig::UDEV)
 
-# Input side + scaler: V4L2 capture (TC358743 -> ISP) and the RGA (R6, R7, N2, N8).
+# Input side, scaler, settings + config server (R5, R6, R7, R9, N2, N8).
 add_library(pipeline STATIC
   src/capture.cpp
+  src/http_server.cpp
   src/rga_scaler.cpp
+  src/settings.cpp
 )
 target_include_directories(pipeline PUBLIC src)
 target_link_libraries(pipeline PUBLIC output PkgConfig::RGA)
@@ -52,3 +54,7 @@ add_test(NAME mode_select COMMAND mode_select_tests)
 add_executable(aspect_tests tests/aspect_tests.cpp)
 target_link_libraries(aspect_tests PRIVATE output)
 add_test(NAME aspect COMMAND aspect_tests)
+
+add_executable(web_tests tests/web_tests.cpp)
+target_link_libraries(web_tests PRIVATE pipeline)
+add_test(NAME web COMMAND web_tests)

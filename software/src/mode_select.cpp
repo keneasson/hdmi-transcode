@@ -61,12 +61,13 @@ bool same_timing(const drmModeModeInfo& a, const drmModeModeInfo& b) {
 }
 
 std::string describe(const drmModeModeInfo& m) {
-  const int mhz = refresh_mhz(m);
+  // Two decimals, dropped when they are .00 (60.004 Hz reads "60", 59.94 stays).
+  const int centi = (refresh_mhz(m) + 5) / 10;
   char hz[16];
-  if (mhz % 1000 == 0)
-    std::snprintf(hz, sizeof hz, "%d", mhz / 1000);
+  if (centi % 100 == 0)
+    std::snprintf(hz, sizeof hz, "%d", centi / 100);
   else
-    std::snprintf(hz, sizeof hz, "%.2f", mhz / 1000.0);
+    std::snprintf(hz, sizeof hz, "%d.%02d", centi / 100, centi % 100);
   return std::to_string(m.hdisplay) + "x" + std::to_string(m.vdisplay) + " @ " + hz + "Hz";
 }
 
