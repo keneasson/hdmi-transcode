@@ -33,6 +33,13 @@ sudo build/hdmi-transcode --snapshot /run/frame.ppm      # saves the 120th shown
 ```
 
 It logs the output mode, input changes, and every 10 s: input fps, shown fps and RGA time.
+
+**Configuration page** (R9, R12): `http://<box>/` from a phone or laptop on the same
+network: picture shape, projector resolution (Automatic recommended), test pattern. Changes
+apply immediately and are saved to `/var/lib/hdmi-transcode/settings` (R5). The JSON API
+behind it: `GET /api/status`; `POST /api/settings` (form fields `aspect`, `mode`,
+`test_pattern`; requires the header `X-HT-Request: 1`). Only private-network clients are
+served (R11a).
 With no input it shows the test pattern labelled NO INPUT. Only one process may use the
 capture device at a time (N8): stop the app before running `v4l2-ctl` streaming.
 
@@ -82,6 +89,8 @@ hdmi-transcode && sudo systemctl unmask getty@tty1`, and restore
 - `src/capture.*`, `src/capture_edid.h`: V4L2 capture via TC358743 + ISP, our upstream
   EDID (R6, R7, N8).
 - `src/rga_scaler.*`: RGA scale + YUV→RGB into the scanout buffer, black bars (N2).
+- `src/settings.*`: persisted settings, atomic save (R5).
+- `src/http_server.*`, `src/web_page.h`: the configuration page and its API (R9, R11a, R12).
 - `src/app_main.cpp`: the `hdmi-transcode` event loop.
 - `packaging/`: systemd unit, defaults file, board install script.
 - `src/test_pattern.*`: the generated test pattern (R4), pure drawing into a `Surface`.

@@ -1,5 +1,7 @@
-# Arguments for hdmi-transcode at boot. Until the config web page (R9) exists, change the
-# output here and run `sudo systemctl restart hdmi-transcode`.
-#   --mode WxH[@Hz]                              force an output mode (default: automatic)
-#   --aspect compress|letterbox|crop|native      R3 aspect handling (default: compress)
-HT_ARGS="--aspect compress"
+# Extra arguments for hdmi-transcode at boot. Normally empty: the output mode, picture
+# shape and test pattern are set from the web page (http://<box>/) and saved in
+# /var/lib/hdmi-transcode/settings. Arguments here override those settings at every boot.
+#   --mode WxH[@Hz]                              force an output mode
+#   --aspect compress|letterbox|crop|native      force the picture shape
+#   --port N                                     web page port (default 80)
+HT_ARGS=""

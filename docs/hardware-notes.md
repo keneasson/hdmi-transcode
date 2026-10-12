@@ -88,8 +88,8 @@ lights from the Zero's supply through the cable (2026-10-11).
 
 | Item | Value | Date |
 |---|---|---|
-| `iw list` supports AP mode? | | |
-| AP + client at the same time? | | |
+| `iw list` supports AP mode? | yes (AIC8800DS2; NM `WIFI-PROPERTIES.AP: yes`, 2.4 + 5 GHz). `iw` lives in `/usr/sbin` (not on the radxa user's PATH) | 2026-10-12 |
+| AP + client at the same time? | **yes per the driver**: `#{ managed, mesh point } <= 1, #{ AP } <= 1, #{ P2P-client, P2P-GO } <= 1, total <= 4, #channels <= 3`. Not yet tried on air | 2026-10-12 |
 | Hotspot from a phone worked? | | |
 
 ## Capture (bringup §8, after the C790 arrives)
@@ -108,6 +108,15 @@ lights from the Zero's supply through the cable (2026-10-11).
 ## Gotchas discovered
 
 Free-form, newest first. Anything that cost more than ten minutes goes here.
+
+- **2026-10-12, configuration page + saved settings work** (board A, from the Mac over the
+  home LAN): `GET /api/status`, `POST /api/settings` (aspect, mode, test pattern) apply
+  live and survive a service restart. Cross-site POST without `X-HT-Request` → 403, bad
+  values → 400. A saved resolution the display doesn't offer is kept and reported, and the
+  output falls back to the automatic choice. Packaging trap found: the first release's
+  `/etc/default/hdmi-transcode` (`HT_ARGS="--aspect compress"`) overrode the saved aspect
+  at every boot; `install-board.sh` now replaces exactly that file. Hotspot (R9 first
+  path) not yet tried on air: needs Ken present in case the radio drops the client link.
 
 - **2026-10-12, board A boots straight into hdmi-transcode** (`packaging/install-board.sh`).
   Kernel cmdline now has no `splash` (Plymouth is installed and would hold the display)

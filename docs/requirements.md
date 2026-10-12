@@ -168,3 +168,9 @@ pickiness and this box's EDID reach the laptop only through that setting. Conseq
 - Production Buildroot image details (decided: Radxa headless image for bring-up,
   Buildroot on the Rockchip BSP kernel for production; see CLAUDE.md).
 - USB configuration mechanism (R10).
+- **Config page access control (R11a).** The page (built 2026-10-12) serves only private
+  addresses and rejects cross-site requests, but anyone on the same network can change
+  the picture. Needs a decision: a PIN/password (set at first use, shown on the test
+  pattern?), or acceptable on a trusted venue LAN + the box's own hotspot.
+- **R3 "Native".** As written it is geometrically identical to Compress (stretch to fill),
+  so it is not offered on the page. Intended meaning? (e.g. 1:1 pixels, no scaling.)
