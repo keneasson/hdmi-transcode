@@ -109,6 +109,23 @@ lights from the Zero's supply through the cable (2026-10-11).
 
 Free-form, newest first. Anything that cost more than ten minutes goes here.
 
+- **2026-10-11, our own capture → RGA → display pipeline works** (board A, Mac at 1080p60
+  as source, `hdmi-transcode --mode 1280x800@60`): steady **60.0 fps in, 60.0 fps shown,
+  RGA 4.6 ms avg / 5.1 ms max per frame**, ~5 % CPU. Snapshots of the shown frame
+  confirmed the R3 geometry to within a pixel for compress, letterbox (40 px bars) and
+  crop (96 px trimmed per side). The 4 GB board's RAM caused no RGA2 addressing errors
+  with ISP and DRM dumb buffers. Traps:
+  - librga 1.10.1: the YUV→RGB matrix (`IM_YUV_TO_RGB_BT709_LIMIT` = 3) must be set with
+    `imsetColorSpace()` on the source buffer. OR-ed into `improcess()`'s usage word it is
+    read as rotate/flip; librga then logs `Could not find rotate/flip usage : 0x80003`
+    per frame **and still returns success**. Don't trust its status alone.
+  - Loading our EDID (`VIDIOC_S_EDID`) makes the source re-handshake: expect one or two
+    source-change events in the first second.
+  - Output 1280x800 is 59.91 Hz on the SyncMaster vs 60.00 Hz in: one frame in ~1100 is
+    dropped (newest wins). Expected; R8a forbids locking the output to the input.
+  - Raw ISP rate measured alone with v4l2-ctl: 60.01 fps.
+  - Our capture EDID (`src/capture_edid.h`) passes `edid-decode --check` with no warnings.
+
 - **2026-10-11, hot-plug can be tested from SSH.** Writing `off` / `on` / `detect` to
   `/sys/class/drm/card0-HDMI-A-1/status` (root) emits the same udev event as a cable
   change (`ACTION=change`, `HOTPLUG=1` on `card0`); `detect` returns to real detection.
