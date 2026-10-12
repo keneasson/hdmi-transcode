@@ -141,9 +141,11 @@ Not yet defined. When the first code lands, record here:
   field robustness, and the hardware-touching rules.
 - Standing permission (Ken, 2026-10-04/05): run `/pr`, fix its findings, push the
   branch, open the PR, and **merge it** ("merge at will") without asking each time.
-  Squash-merge, delete the branch, report the link and the review verdict. Still
-  pause and ask if the review has an unresolved 🔴, or if the diff touches the board
-  (device tree, boot, flashing, provisioning).
+  Squash-merge, delete the branch, report the link and the review verdict. This
+  applies to **every** PR, including ones touching device tree, boot, flashing or
+  provisioning (Ken, 2026-10-11: "Always"). Fix any 🔴 from the review before merging
+  rather than merging over it. (Separate from merging: changes made *on the board*
+  itself still follow the hardware rule above.)
 - Standing permission (Ken, 2026-10-04): install developer tooling on the Mac
   (Homebrew) without asking, and record each tool and why in `docs/bringup.md`
   "Mac-side tools". Still ask before anything that touches the board (above).
